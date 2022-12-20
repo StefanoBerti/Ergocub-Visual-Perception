@@ -1,0 +1,12 @@
+# Pycache at every level
+*__pycache__*
+
+# Direcotry starting with .
+.*
+
+# All testing videos
+*.bag
+
+# All onnxs
+*.onnx
+
