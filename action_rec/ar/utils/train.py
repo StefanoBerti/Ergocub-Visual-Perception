@@ -56,17 +56,19 @@ if __name__ == "__main__":
         model.distribute_model()
 
     # Create dataset iterator
-    train_data = MyLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type, l=args.seq_len)
-    valid_data = MyLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type, l=args.seq_len)
+    train_data = MyLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type, l=args.seq_len,
+                          n=args.shot, given_122=not ubuntu, do_augmentation=True)
+    valid_data = MyLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type, l=args.seq_len,
+                          n=args.shot, given_122=not ubuntu, do_augmentation=False)
 
     all_classes = list(filter(lambda x: x not in test_classes, train_data.all_classes))
     idx = int(len(all_classes)*0.8)
     train_data.all_classes, valid_data.all_classes = all_classes[:idx], all_classes[idx:]
 
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, num_workers=args.n_workers,
-                                               shuffle=True)
+                                               shuffle=True, pin_memory=True)
     valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.batch_size, num_workers=args.n_workers,
-                                               shuffle=True)
+                                               shuffle=False, pin_memory=True)
 
     # Create optimizer and scheduler
     optimizer = torch.optim.SGD(model.parameters(), lr=args.initial_lr)
@@ -104,20 +106,25 @@ if __name__ == "__main__":
 
         # TRAIN
         model.train() if not do_eval else model.eval()
-        for i, elem in enumerate(tqdm(train_loader if not do_eval else valid_loader)):
+        desc = f"Training epoch {epoch}" if not do_eval else f"Validating epoch {epoch}"
+        for i, elem in enumerate(tqdm(train_loader if not do_eval else valid_loader, desc=desc)):
 
             # Extract from dict, convert, move to GPU
             support_set = {t: elem['support_set'][t].float().to(device) for t in elem['support_set'].keys()}
             target_set = {t: elem['target_set'][t].float().to(device) for t in elem['target_set'].keys()}
             unknown_set = {t: elem['unknown_set'][t].float().to(device) for t in elem['unknown_set'].keys()}
 
-            support_labels = torch.arange(args.way).repeat(b).reshape(b, args.way).to(device).int()
+            support_labels = elem['support_classes'].float().to(device)
             target = (elem['support_classes'] == elem['target_class'][..., None]).float().to(device)
 
             ################
             # Known action #
             ################
-            out = model(support_set, support_labels, target_set)
+            if not do_eval:
+                out = model(support_set, support_labels, target_set)
+            else:
+                with torch.no_grad():
+                    out = model(support_set, support_labels, target_set)
 
             # FS known
             fs_pred = out['logits']
