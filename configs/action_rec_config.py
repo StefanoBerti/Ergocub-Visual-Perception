@@ -50,7 +50,7 @@ class Network(BaseConfig):
         in_config = {'realsense': ['rgb', 'depth']}
 
         out_config = {'visualizer': {k: None for k in
-                                     ['fps_ar', 'human_distance', 'focus', 'pose', 'bbox', 'face_bbox', 'actions', 'is_true', 'requires_focus', 'edges']},
+                                     ['fps_ar', 'human_distance', 'focus', 'pose', 'bbox', 'face_bbox', 'actions', 'is_true', 'requires_focus', 'edges', 'rgb', 'log']},
                       'action_recognition_rpc': {'action': -1, 'human_distance': -1., 'focus': False}}
         # make the output queue blocking (can be used to put a breakpoint in the sink and debug the process output)
         blocking = False

@@ -1,5 +1,6 @@
 import copy
 import sys
+from multiprocessing.managers import BaseManager
 from pathlib import Path
 
 import tensorrt  # TODO NEEDED IN ERGOCUB, NOT NEEDED IN ISBFSAR
@@ -39,6 +40,8 @@ class ISBFSAR(Network.node):
         self.hpe_proc = None
         self.ar = None
         self.last_data = None
+        self.commands_queue = None
+        self.last_log = None
 
     def startup(self):
         # Load modules
@@ -55,6 +58,12 @@ class ISBFSAR(Network.node):
         self.ar = AR.model(**AR.Args.to_dict())
         self.ar.load()
 
+        # To receive human commands
+        BaseManager.register('get_queue')
+        manager = BaseManager(address=('localhost', 50000), authkey=b'abracadabra')
+        manager.connect()
+        self.commands_queue = manager.get_queue("human_console_commands")
+
     def get_frame(self, img=None, log=None):
         """
         get frame, do inference, return all possible info
@@ -68,8 +77,8 @@ class ISBFSAR(Network.node):
 
         # If img is not given (not a video), try to get img
         if img is None:
-            img = self._in_queue.get()["rgb"]
-        elements["img"] = img
+            img = self._recv()["rgb"]
+        elements["rgb"] = img
 
         # Start independent modules
         self.focus_in.put(img)
@@ -134,7 +143,8 @@ class ISBFSAR(Network.node):
 
         # Msg
         if log is not None:
-            elements["log"] = log
+            self.last_log = log
+        elements["log"] = self.last_log
 
         return elements
 
@@ -146,9 +156,8 @@ class ISBFSAR(Network.node):
         else:  # It arrives just a message, but we need all
             data.update(self.last_data)
 
-        if "msg" in data.keys() and data["msg"] != '':
-
-            msg = data["msg"]
+        if not self.commands_queue.empty():
+            msg = self.commands_queue.get()
             msg = msg.strip()
             msg = msg.split()
 
@@ -157,9 +166,8 @@ class ISBFSAR(Network.node):
                 exit()
 
             elif msg[0] == "add" and len(msg) > 1:
-                # self._send_all({"ACK": True}, blocking=False)
                 log = self.learn_command(msg[1:])
-                data = self._in_queue.get()
+                data = self._recv()
 
             elif msg[0] == "remove" and len(msg) > 1:
                 log = self.forget_command(msg[1])
@@ -171,7 +179,7 @@ class ISBFSAR(Network.node):
                 log = self.ar.load()
 
             elif msg[0] == "debug":
-                self.debug()
+                log = self.debug()
             else:
                 log = "Not a valid command!"
         d = self.get_frame(img=data["rgb"], log=log)
@@ -221,9 +229,9 @@ class ISBFSAR(Network.node):
         flag = flag[0]
         now = time.time()
         while (time.time() - now) < 3:
-            self.get_frame(log="WAIT...")
+            self._send_all(self.get_frame(log="WAIT..."), False)
 
-        self.get_frame(log="GO!")
+        self._send_all(self.get_frame(log="GO!"), False)
         # playsound('assets' + os.sep + 'start.wav')
         data = [[] for _ in range(self.window_size)]
         i = 0
@@ -231,6 +239,7 @@ class ISBFSAR(Network.node):
         while i < self.window_size:
             start = time.time()
             res = self.get_frame(log="{:.2f}%".format((i / (self.window_size - 1)) * 100))
+            self._send_all(res, False)
             # Check if the sample is good w.r.t. input type
             good = self.input_type in ["skeleton", "hybrid"] and "pose" in res.keys() and res["pose"] is not None
             good = good or self.input_type == "rgb"
