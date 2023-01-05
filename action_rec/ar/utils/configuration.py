@@ -16,20 +16,20 @@ class TRXTrainConfig(object):
         self.model = "DISC"  # DISC or EXP
         self.input_type = input_type  # skeleton or rgb
         self.way = 5
-        self.shot = 1
+        self.shot = 5
         self.device = 'cuda'
         self.skeleton_type = 'smpl+head_30'
 
         # CHOICE DATASET
-        data_name = "NTURGBD_to_YOLO_METRO_122"
+        data_name = "NTURGBD_to_YOLO_METRO" if ubuntu else "NTURGBD_to_YOLO_METRO_122"
         self.data_path = f"D:\\datasets\\{data_name}" if not ubuntu else f"../datasets/{data_name}"
         self.n_joints = 30
 
         # TRAINING
         self.initial_lr = 1e-2 if self.input_type == "skeleton" else 3e-4
-        self.n_task = (100 if self.input_type == "skeleton" else 30) if not ubuntu else (10000 if self.input_type == "skeleton" else 500)
+        self.n_task = (100 if self.input_type == "skeleton" else 30) if not ubuntu else (1000 if self.input_type == "skeleton" else 500)
         self.optimize_every = 1  # Put to 1 if not used, not 0 or -1!
-        self.batch_size = 1 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
+        self.batch_size = 4 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
         self.n_epochs = 10000
         self.start_discriminator_after_epoch = 0  # self.n_epochs  # TODO CAREFUL
         self.first_mile = self.n_epochs  # 15 TODO CAREFUL

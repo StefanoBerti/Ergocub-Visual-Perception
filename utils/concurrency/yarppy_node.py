@@ -87,22 +87,13 @@ class YarpPyNode(Process, ABC):
                         self.yarp_data[f'/{in_q}/{port}'] = rgb_image
                         self.np_buffer[f'/{in_q}/{port}'] = rgb_buffer
 
-                    if port == "command":  # TODO FIX TO WORK WITH STRINGS
-                        p = yarp.BufferedPortVectorInt()
-                        command_buffer = bytearray(np.zeros((30,), dtype=np.int))
-                        command_vector = yarp.VectorInt()
-                        for i, value in enumerate(command_buffer):
-                            command_vector.set(i, value)
-
-                        self.yarp_data[f'/{in_q}/{port}'] = command_vector
-                        self.np_buffer[f'/{in_q}/{port}'] = command_buffer
-
                     port_id = random.randint(0, 9999)
                     p.open(f'/{in_q}/{port}_{port_id:04}_in')
                     self._in_queues[f'/{in_q}/{port}'] = p
 
                     yarp.Network.connect(f'/{in_q}/{port}_out', f'/{in_q}/{port}_{port_id:04}_in')
                     print(f"Connecting /{in_q}/{port}_out to /{in_q}/{port}_{port_id:04}_in")
+
 
         self._out_queues = {k: manager.get_queue(k) for k in out_config}
 

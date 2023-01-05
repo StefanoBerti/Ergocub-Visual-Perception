@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import numpy as np
 
 
 class MPLPosePrinter:
@@ -22,9 +21,9 @@ class MPLPosePrinter:
         # self.ax.set_title('3D Test')
         plt.grid(False)
         plt.axis('off')
-        self.fig.show()
 
     def print_pose(self, pose, edges, color='b'):
+        self.ax.plot([0, 0], [-1, 1], [0, 0])
         if len(pose.shape) == 2:
             pose = pose[None]
         # pose_flat = pose.reshape(-1, 3)
@@ -36,6 +35,7 @@ class MPLPosePrinter:
                     b = p[edge[1]]
                     self.ax.plot([a[0], b[0]], [a[1], b[1]], [a[2], b[2]], color)
         plt.draw()
+        plt.show()
 
     def clear(self):
         self.ax.lines.clear()

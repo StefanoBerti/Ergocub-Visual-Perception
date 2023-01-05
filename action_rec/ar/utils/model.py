@@ -5,6 +5,7 @@ from itertools import combinations
 from torch.autograd import Variable
 from torchvision.models import resnet50, ResNet
 from torchvision.models.resnet import Bottleneck
+from torch.nn.functional import softmax
 
 NUM_SAMPLES = 1
 
@@ -57,17 +58,15 @@ class TemporalCrossTransformer(nn.Module):
         self.scores = []
 
     def forward(self, support_set, support_labels, queries):
-        n_queries = queries.shape[1]
-        n_support = support_set.shape[1]
-        batch_size = queries.shape[0]
+        b, k, n, _, _ = support_set.shape
 
         # static pe
         support_set = self.pe(support_set)
         queries = self.pe(queries)
 
         # construct new queries and support set made of tuples of images after pe
-        s = [torch.index_select(support_set, -2, p).reshape(batch_size, n_support, -1) for p in self.tuples]
-        q = [torch.index_select(queries, -2, p).reshape(batch_size, n_queries, -1) for p in self.tuples]
+        s = [torch.index_select(support_set, -2, p).reshape(b, k, n, -1) for p in self.tuples]
+        q = [torch.index_select(queries, -2, p).reshape(b, 1, 1, -1) for p in self.tuples]
         support_set = torch.stack(s, dim=-2)
         queries = torch.stack(q, dim=-2)
 
@@ -83,69 +82,85 @@ class TemporalCrossTransformer(nn.Module):
         mh_support_set_vs = support_set_vs
         mh_queries_vs = queries_vs
 
-        # unique_labels = torch.unique(support_labels)  # TODO READD
-        # I REMOVED THE LINE ABOVE BECAUSE UNIQUE IS NOT SUPPORTED IN TRT
-        # unique_labels = support_labels
+        # TODO ULTRA NEW
 
-        # init tensor to hold distances between every support tuple and every target tuple
-        # all_distances_tensor = torch.zeros(n_queries, self.args.way).cuda()
-        all_distances_tensor = []
-        diffs = []
-        prototypes = []
-        for c in support_labels[0]:
-            # select keys and values for just this class
-            class_k = torch.index_select(mh_support_set_ks, -3, c)
-            class_v = torch.index_select(mh_support_set_vs, -3, c)
-            # k_bs = class_k.shape[0]
+        scores = torch.matmul(mh_queries_ks, mh_support_set_ks.transpose(-1, -2)) / math.sqrt(self.args.trans_linear_out_dim)
+        scores = softmax(scores, dim=-1)
+        query_prototype = torch.matmul(scores, mh_support_set_vs)
+        query_prototype = torch.mean(query_prototype, dim=2, keepdim=True)
 
-            class_scores = torch.matmul(mh_queries_ks, class_k.transpose(-2, -1)) / math.sqrt(
-                self.args.trans_linear_out_dim)
+        diff = mh_queries_vs - query_prototype
+        norm_sq = torch.norm(diff, dim=[-2, -1])**2
+        distance = torch.div(norm_sq, self.tuples_len)
+        distance = distance * -1
 
-            # reshape etc. to apply a softmax for each query tuple
-            # class_scores = class_scores.permute(0, 2, 1, 3)
-            # class_scores = class_scores.reshape(batch_size, n_queries, self.tuples_len, self.tuples_len)  # -1
+        return {'logits': distance.squeeze(-1), 'diffs': diff, 'prototypes': query_prototype}
 
-            # TODO BEFORE
-            class_scores = self.class_softmax(class_scores)
-            if self.add_hook:
-                self.scores.append(class_scores.detach())
-            # TODO NEW
-            # max_along_axis = class_scores.max(dim=-2, keepdim=True).values
-            # exponential = torch.exp(class_scores[0] - max_along_axis)
-            # denominator = torch.sum(exponential, dim=-2, keepdim=True)
-            # denominator = denominator.repeat(1, self.tuples_len)
-            # class_scores = torch.div(exponential, denominator)
-            # TODO END
-
-            # class_scores = torch.cat(class_scores)
-            # class_scores = class_scores.reshape(batch_size, n_queries, self.tuples_len, 1, self.tuples_len)  # -1
-            # class_scores = class_scores.permute(0, 1, 3, 2, 4)
-
-            # get query specific class prototype
-            query_prototype = torch.matmul(class_scores, class_v)
-            prototypes.append(query_prototype)
-            # query_prototype = torch.sum(query_prototype, dim=1)
-
-            # calculate distances from queries to query-specific class prototypes
-            diff = mh_queries_vs - query_prototype
-            norm_sq = torch.norm(diff, dim=[-2, -1]) ** 2
-            distance = torch.div(norm_sq, self.tuples_len)
-
-            # multiply by -1 to get logits
-            distance = distance * -1
-            all_distances_tensor.append(distance)
-            # c_idx = c.long()
-            # all_distances_tensor[:, c_idx] = 1  # distance
-            # all_distances_tensor = all_distances_tensor + c_idx + distance
-
-            diffs.append(diff)
-
-        all_distances_tensor = torch.cat(all_distances_tensor, dim=1)
-
-        return_dict = {'logits': all_distances_tensor, 'diffs': torch.concat(diffs, dim=1),
-                       'prototypes': prototypes}
-
-        return return_dict
+        # # TODO OLD
+        #
+        # # unique_labels = torch.unique(support_labels)  # TODO READD
+        # # I REMOVED THE LINE ABOVE BECAUSE UNIQUE IS NOT SUPPORTED IN TRT
+        # # unique_labels = support_labels
+        #
+        # # init tensor to hold distances between every support tuple and every target tuple
+        # # all_distances_tensor = torch.zeros(n_queries, self.args.way).cuda()
+        # all_distances_tensor = []
+        # diffs = []
+        # prototypes = []
+        # for c in support_labels[0]:
+        #     # select keys and values for just this class
+        #     class_k = torch.index_select(mh_support_set_ks, -3, c)
+        #     class_v = torch.index_select(mh_support_set_vs, -3, c)
+        #     # k_bs = class_k.shape[0]
+        #
+        #     class_scores = torch.matmul(mh_queries_ks, class_k.transpose(-2, -1)) / math.sqrt(
+        #         self.args.trans_linear_out_dim)
+        #
+        #     # reshape etc. to apply a softmax for each query tuple
+        #     # class_scores = class_scores.permute(0, 2, 1, 3)
+        #     # class_scores = class_scores.reshape(batch_size, n_queries, self.tuples_len, self.tuples_len)  # -1
+        #
+        #     # TODO BEFORE
+        #     class_scores = self.class_softmax(class_scores)
+        #     if self.add_hook:
+        #         self.scores.append(class_scores.detach())
+        #     # TODO NEW
+        #     # max_along_axis = class_scores.max(dim=-2, keepdim=True).values
+        #     # exponential = torch.exp(class_scores[0] - max_along_axis)
+        #     # denominator = torch.sum(exponential, dim=-2, keepdim=True)
+        #     # denominator = denominator.repeat(1, self.tuples_len)
+        #     # class_scores = torch.div(exponential, denominator)
+        #     # TODO END
+        #
+        #     # class_scores = torch.cat(class_scores)
+        #     # class_scores = class_scores.reshape(batch_size, n_queries, self.tuples_len, 1, self.tuples_len)  # -1
+        #     # class_scores = class_scores.permute(0, 1, 3, 2, 4)
+        #
+        #     # get query specific class prototype
+        #     query_prototype = torch.matmul(class_scores, class_v)
+        #     prototypes.append(query_prototype)
+        #     # query_prototype = torch.sum(query_prototype, dim=1)
+        #
+        #     # calculate distances from queries to query-specific class prototypes
+        #     diff = mh_queries_vs - query_prototype
+        #     norm_sq = torch.norm(diff, dim=[-2, -1]) ** 2
+        #     distance = torch.div(norm_sq, self.tuples_len)
+        #
+        #     # multiply by -1 to get logits
+        #     distance = distance * -1
+        #     all_distances_tensor.append(distance)
+        #     # c_idx = c.long()
+        #     # all_distances_tensor[:, c_idx] = 1  # distance
+        #     # all_distances_tensor = all_distances_tensor + c_idx + distance
+        #
+        #     diffs.append(diff)
+        #
+        # all_distances_tensor = torch.cat(all_distances_tensor, dim=1)
+        #
+        # return_dict = {'logits': all_distances_tensor, 'diffs': torch.concat(diffs, dim=1),
+        #                'prototypes': prototypes}
+        #
+        # return return_dict
 
     @staticmethod
     def _extract_class_indices(labels, which_class):
@@ -208,7 +223,7 @@ class PostResNet(nn.Module):
     def __init__(self):
         super().__init__()
         self.act1 = torch.nn.ReLU()
-        self.l1 = torch.nn.Linear(2048, 256)  # TODO PUT 2048
+        self.l1 = torch.nn.Linear(2048, 256)
 
     def forward(self, x):
         x = self.act1(x)
@@ -216,51 +231,50 @@ class PostResNet(nn.Module):
         return x
 
 
+# TO add hook for GRAD-CAM
+class myresnet50(ResNet):
+    def __init__(self, pretrained=True):
+        super().__init__(Bottleneck, [3, 4, 6, 3])
+        self.gradients = []
+        self.activations = []
+
+    def activations_hook(self, grad):
+        self.gradients.append(grad)
+
+    # method for the gradient extraction
+    def get_activations_gradient(self):
+        return self.gradients
+
+    def forward(self, x, hook=False):
+        # See note [TorchScript super()]
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+
+        x = self.layer2(x)
+
+        x = self.layer3(x)
+
+        x = self.layer4(x)
+
+        # For GRAD-CAM
+        self.gradients = []
+        self.activations.append(x.detach())
+        h = x.register_hook(self.activations_hook)
+
+        x = self.avgpool(x)
+
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+
+        return x
+
+
 class TRXOS(nn.Module):
-
-    class myresnet50(ResNet):
-        def __init__(self, pretrained=True):
-            super().__init__(Bottleneck, [3, 4, 6, 3])
-            self.gradients = []
-            self.activations = []
-
-        def activations_hook(self, grad):
-            self.gradients.append(grad)
-
-        # method for the gradient extraction
-        def get_activations_gradient(self):
-            return self.gradients
-
-        def forward(self, x, hook=False):
-            # See note [TorchScript super()]
-            x = self.conv1(x)
-            x = self.bn1(x)
-            x = self.relu(x)
-            x = self.maxpool(x)
-
-            x = self.layer1(x)
-
-            x = self.layer2(x)
-
-            x = self.layer3(x)
-
-            x = self.layer4(x)
-
-            # For GRAD-CAM
-            self.gradients = []
-            self.activations.append(x.detach())
-            h = x.register_hook(self.activations_hook)
-
-            x = self.avgpool(x)
-
-            x = torch.flatten(x, 1)
-            x = self.fc(x)
-
-            return x
-
     def __init__(self, args, add_hook=False):
-        from .configuration import TRXTrainConfig  # TODO CHECK
-        args = TRXTrainConfig()
         super(TRXOS, self).__init__()
         self.args = args
         self.way = args.way
@@ -274,9 +288,8 @@ class TRXOS(nn.Module):
                 resnet = self.myresnet50(pretrained=True)
                 self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])
             else:
-                resnet = resnet50(pretrained=True)  # weights='ResNet50_Weights.DEFAULT'
-                self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])  # TODO NEW
-                # self.features_extractor["rgb"] = resnet  # TODO OLD
+                resnet = resnet50(pretrained=True)
+                self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])
 
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s, add_hook=add_hook) for s in args.temp_set])
 
@@ -303,7 +316,7 @@ class TRXOS(nn.Module):
         if "sk" in query_data.keys():
             target_features_sk = self.features_extractor['sk'](query_data["sk"])
             features.append(target_features_sk)
-        query_features = torch.concat(features, dim=-1).unsqueeze(1)
+        query_features = torch.concat(features, dim=-1).unsqueeze(1).unsqueeze(1)  # Add n and k dimensions
 
         # Support set
         if ss_features is None:
