@@ -332,6 +332,8 @@ class TRXOS(nn.Module):
             ss_features = torch.concat(features, dim=-1)
 
         # Post ResNet
+        print(torch.count_nonzero(ss_features, dim=(-1, -2)).shape)
+        print(torch.count_nonzero(ss_features, dim=(-1, -2)) > 0)
         out = self.transformers[0](ss_features, ss_labels, query_features)
         all_logits = out['logits']
 

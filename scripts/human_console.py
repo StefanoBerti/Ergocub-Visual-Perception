@@ -46,8 +46,8 @@ class VISPYVisualizer(Network.node):
             # self.output_queue.put(self.input_text[1:])  # Do not send '>'
             self.input_text = '>'
             self.log_text.text = ''
-        elif x.text == '\\':
-            self.show = not self.show
+        # elif x.text == '\\':
+        #     self.show = not self.show
         elif x.text == '`':
             self.os = not self.os
         else:
@@ -139,7 +139,7 @@ class VISPYVisualizer(Network.node):
         b4.camera = scene.PanZoomCamera(rect=(0, 0, 1, 1))
         b4.camera.interactive = False
         b4.border_color = (0.5, 0.5, 0.5, 1)
-        self.desc_add = Text('ADD ACTION: add action_name [-focus]', color='white', rotation=0,
+        self.desc_add = Text('ADD ACTION: add action_name ss_id [-focus]', color='white', rotation=0,
                              anchor_x="left",
                              anchor_y="bottom",
                              font_size=10, pos=(0.1, 0.9))

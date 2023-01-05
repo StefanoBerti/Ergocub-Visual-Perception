@@ -165,7 +165,7 @@ class ISBFSAR(Network.node):
             if msg[0] == 'close' or msg[0] == 'exit' or msg[0] == 'quit' or msg[0] == 'q':
                 exit()
 
-            elif msg[0] == "add" and len(msg) > 1:
+            elif msg[0] == "add" and len(msg) > 1:  # TODO ADD INDEX OF SUPPORT SET POSITION
                 log = self.learn_command(msg[1:])
                 data = self._recv()
 
@@ -194,7 +194,7 @@ class ISBFSAR(Network.node):
     def debug(self):
         ss = self.ar.support_set
         if len(ss) == 0:
-            return
+            return "Support set is empty"
         if self.input_type in ["hybrid", "imgs"]:
             ss = np.stack([ss[c]["imgs"].detach().cpu().numpy() for c in ss.keys()])
             ss = ss.swapaxes(-2, -3).swapaxes(-1, -2)
@@ -206,27 +206,35 @@ class ISBFSAR(Network.node):
                                   (640, 96 * len(ss))))
         if self.input_type in ["hybrid", "skeleton"]:
             ss = np.stack([ss[c]["poses"].detach().cpu().numpy() for c in ss.keys()])
-            ss = ss.reshape(ss.shape[:-1]+(30, 3))
-            size = 100
-            visual = np.zeros((size*ss.shape[0], size*ss.shape[1]))
-            ss = (ss + 1)*(size/2)  # Send each pose from [-1, +1] to [0, size]
-            ss = ss[..., :2]
-            ss[..., 1] += np.arange(ss.shape[0])[..., None, None].repeat(ss.shape[1], axis=1)*size
-            ss[..., 0] += np.arange(ss.shape[1])[None, ..., None].repeat(ss.shape[0], axis=0)*size
-            ss = ss.reshape(-1, 30, 2).astype(int)
-            for pose in ss:
-                for point in pose:
-                    visual = cv2.circle(visual, point, 1, (255, 0, 0))
-                for edge in self.edges:
-                    visual = cv2.line(visual, pose[edge[0]], pose[edge[1]], (255, 0, 0))
-                cv2.imwrite("SUPPORT_SET.png", visual)
+            classes = []
+            for ss_c in ss:  # FOR EACH CLASS, 5, 16, 90
+                ss_c = ss_c.reshape(ss_c.shape[:-1]+(30, 3))  # 5, 16, 30 , 3
+                size = 100
+                visual = np.zeros((size*ss_c.shape[0], size*ss_c.shape[1]))
+                ss_c = (ss_c + 1)*(size/2)  # Send each pose from [-1, +1] to [0, size]
+                ss_c = ss_c[..., :2]
+                ss_c[..., 1] += np.arange(ss_c.shape[0])[..., None, None].repeat(ss_c.shape[1], axis=1)*size
+                ss_c[..., 0] += np.arange(ss_c.shape[1])[None, ..., None].repeat(ss_c.shape[0], axis=0)*size
+                ss_c = ss_c.reshape(-1, 30, 2).astype(int)
+                for pose in ss_c:
+                    for point in pose:
+                        visual = cv2.circle(visual, point, 1, (255, 0, 0))
+                    for edge in self.edges:
+                        visual = cv2.line(visual, pose[edge[0]], pose[edge[1]], (255, 0, 0))
+                classes.append(visual)
+            visual = np.concatenate(classes, axis=0)
+            cv2.imwrite("SUPPORT_SET.png", visual)
             # cv2.imshow("support_set_SK", visual)
         # cv2.waitKey(0)
         return "Support saved to SUPPORT_SET.png"
 
     def learn_command(self, flag):
-        requires_focus = "-focus" in flag
-        flag = flag[0]
+        action_name = flag[0]
+        try:
+            ss_id = int(flag[1])
+        except Exception:
+            return "Format not valid"
+        requires_focus = len(flag) == 3 and flag[2] == "-focus"
         now = time.time()
         while (time.time() - now) < 3:
             self._send_all(self.get_frame(log="WAIT..."), False)
@@ -252,7 +260,7 @@ class ISBFSAR(Network.node):
             while (time.time() - start) < off_time:  # Busy wait
                 continue
 
-        inp = {"flag": flag,
+        inp = {"flag": action_name,
                "data": {},
                "requires_focus": requires_focus}
 
@@ -262,8 +270,8 @@ class ISBFSAR(Network.node):
             inp["data"]["poses"] = np.stack([x[0] for x in data])
         if self.input_type == "hybrid":
             inp["data"]["imgs"] = np.stack([x[1] for x in data])
-        self.ar.train(inp)
-        return "Action " + flag + " learned successfully!"
+        self.ar.train(inp, ss_id)
+        return "Action " + action_name + " learned successfully!"
 
 
 def run_module(module, input_queue, output_queue):

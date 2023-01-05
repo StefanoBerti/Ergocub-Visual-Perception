@@ -50,7 +50,7 @@ class Network(BaseConfig):
         in_config = {'realsense': ['rgb', 'depth']}
 
         out_config = {'visualizer': {k: None for k in
-                                     ['fps_ar', 'human_distance', 'focus', 'pose', 'bbox', 'face_bbox', 'actions', 'is_true', 'requires_focus', 'edges']},
+                                     ['fps_ar', 'human_distance', 'focus', 'pose', 'bbox', 'face_bbox', 'actions', 'is_true', 'requires_focus', 'edges', 'log', 'rgb']},
                       'action_recognition_rpc': {'action': -1, 'human_distance': -1., 'focus': False}}
         # make the output queue blocking (can be used to put a breakpoint in the sink and debug the process output)
         blocking = False
@@ -111,7 +111,7 @@ class AR(BaseConfig):
         if input_type == "rgb":
             final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "rgb", "3000.pth")
         elif input_type == "skeleton":
-            final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "DISC.pth")
+            final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "481.pth")
         elif input_type == "hybrid":
             final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "hybrid",
                                            "1714_truncated_resnet.pth")
@@ -119,3 +119,4 @@ class AR(BaseConfig):
         seq_len = seq_len
         way = 5
         n_joints = 30
+        shot = 5

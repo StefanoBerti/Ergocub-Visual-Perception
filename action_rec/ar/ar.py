@@ -4,15 +4,16 @@ import torch
 import copy
 import pickle as pkl
 import os
+from .utils.configuration import TRXTrainConfig
 
 
 class ActionRecognizer:
     def __init__(self, input_type=None, device=None, add_hook=False, final_ckpt_path=None, seq_len=None, way=None,
-                 n_joints=None, support_set_path=None):
+                 n_joints=None, support_set_path=None, shot=None):
         self.input_type = input_type
         self.device = device
 
-        self.ar = TRXOS(None, add_hook=add_hook)
+        self.ar = TRXOS(TRXTrainConfig(), add_hook=add_hook)
         # Fix dataparallel
         state_dict = torch.load(final_ckpt_path, map_location=torch.device(0))['model_state_dict']
         state_dict = OrderedDict({param.replace('.module', ''): data for param, data in state_dict.items()})
@@ -25,6 +26,7 @@ class ActionRecognizer:
         self.previous_frames = []
         self.seq_len = seq_len
         self.way = way
+        self.shot = shot
         self.n_joints = n_joints if input_type == "skeleton" else 0
         self.support_set_path = support_set_path
 
@@ -92,15 +94,21 @@ class ActionRecognizer:
         else:
             return False
 
-    def train(self, inp):
-        self.support_set[inp['flag']] = {c: torch.FloatTensor(inp['data'][c]).cuda() for c in inp['data'].keys()}
+    def train(self, inp, ss_id):
+        for c in inp['data'].keys():
+            if inp['flag'] not in self.support_set.keys():
+                empty_sup = torch.zeros_like(torch.FloatTensor(inp['data'][c])).cuda()  # Create empty sample
+                empty_sup = empty_sup.repeat(self.shot, *(1,)*len(empty_sup.size()))  # Repeat shot times
+                self.support_set[inp['flag']] = {c: empty_sup}
+
+            self.support_set[inp['flag']][c][ss_id] = torch.FloatTensor(inp['data'][c]).cuda()
         self.requires_focus[inp['flag']] = inp['requires_focus']
 
     def save(self):
         with open(os.path.join(self.support_set_path, "support_set.pkl"), 'wb') as outfile:
-            pkl.dump(self.ar.support_set, outfile)
+            pkl.dump(self.support_set, outfile)
         with open(os.path.join(self.support_set_path, "requires_focus.pkl"), 'wb') as outfile:
-            pkl.dump(self.ar.requires_focus, outfile)
+            pkl.dump(self.requires_focus, outfile)
         return "Classes saved successfully in " + self.support_set_path
 
     def load(self):
