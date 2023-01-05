@@ -1,15 +1,20 @@
-from multiprocessing import Process
-from multiprocessing.managers import BaseManager
-from queue import Empty, Full
+# from multiprocessing import Process
+# from multiprocessing.managers import BaseManager
+# from queue import Empty, Full
 import os
 import cv2
-
 os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
 from vispy import app, scene, visuals
 from vispy.scene.visuals import Text, Image
 import numpy as np
 import math
-import yarp
+from pathlib import Path
+from loguru import logger
+import sys
+sys.path.insert(0,  Path(__file__).parent.parent.as_posix())
+from utils.logging import setup_logger
+from configs.human_console_config import Logging, Network
+setup_logger(level=Logging.level)
 
 """
 install with conda install -c conda-forge vispy
@@ -28,7 +33,8 @@ def get_color(value):
     raise Exception("Wrong argument")
 
 
-class VISPYVisualizer:
+@logger.catch(reraise=True)
+class VISPYVisualizer(Network.node):
 
     def printer(self, x):
         if x.text == '\b':
@@ -36,7 +42,8 @@ class VISPYVisualizer:
                 self.input_text = self.input_text[:-1]
             self.log_text.text = ''
         elif x.text == '\r':
-            self.output_queue.put(self.input_text[1:])  # Do not send '>'
+            self._send_all({"human_console_commands": {"msg": self.input_text[1:]}}, blocking=False)
+            # self.output_queue.put(self.input_text[1:])  # Do not send '>'
             self.input_text = '>'
             self.log_text.text = ''
         elif x.text == '\\':
@@ -47,25 +54,15 @@ class VISPYVisualizer:
             self.input_text += x.text
         self.input_string.text = self.input_text
 
-    @staticmethod
-    def create_visualizer(qi, qo):
-        _ = VISPYVisualizer(qi, qo)
-        app.run()
+    # @staticmethod
+    # def create_visualizer(qi, qo):
+    #     _ = VISPYVisualizer(qi, qo)
+    #     app.run()
 
-    def __init__(self, input_queue, output_queue):
+    def __init__(self):
+        super().__init__(**Network.Args.to_dict())
 
-        BaseManager.register('get_queue')
-
-        manager = BaseManager(address=('localhost', 50000), authkey=b'abracadabra')
-        manager.connect()
-
-        # We receive input from action_rec output, queue called "visualizer"
-        self.input_queue = manager.get_queue(input_queue)
-        self.output_queue = manager.get_queue(output_queue)
-
-        self.show = True
-
-        self._timer = app.Timer('auto', connect=self.on_timer, start=True)
+    def startup(self):
         self.input_text = '>'
 
         self.canvas = scene.SceneCanvas(keys='interactive')
@@ -110,7 +107,7 @@ class VISPYVisualizer:
                                font_size=12, pos=(0.5, 0.9))
         self.b2.add(self.focus_text)
         self.fps_text = Text('', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
-                        font_size=12, pos=(0.75, 0.9))
+                             font_size=12, pos=(0.75, 0.9))
         self.b2.add(self.fps_text)
         # Actions (LABEL OF INFO)
         self.fsscore = Text('fs score', color='white', rotation=0, anchor_x="center", anchor_y="bottom",
@@ -161,7 +158,7 @@ class VISPYVisualizer:
         self.input_string = Text(self.input_text, color='purple', rotation=0, anchor_x="left", anchor_y="bottom",
                                  font_size=12, pos=(0.1, 0.3))
         self.log_text = Text('', color='orange', rotation=0, anchor_x="left", anchor_y="bottom",
-                        font_size=12, pos=(0.1, 0.2))
+                             font_size=12, pos=(0.1, 0.2))
         b4.add(self.desc_add)
         b4.add(self.desc_save)
         b4.add(self.desc_load)
@@ -184,19 +181,15 @@ class VISPYVisualizer:
         self.requires_focus = None
         self.log = None
 
-    def on_timer(self, _):
-        if not self.show:
-            return
-
-        # Check if there is something to show
-        elements = self.input_queue.get()
+    def loop(self, elements):
         if not elements:
             return
 
-
         # Parse elements
-        if "ACK" in elements.keys():  # Just an ack flag
-            return
+        # if "ACK" in elements.keys():  # Just an ack flag
+        #     return
+
+        # LOG
         if "log" in elements.keys():
             self.log = elements["log"]
             if self.log is not None and self.log != ' ':
@@ -326,12 +319,16 @@ class VISPYVisualizer:
                         self.focuses.pop(key)
                 if len(self.actions_text) == 0:
                     self.os_score.center = (2, 2)
+        app.process_events()
+        return {}
 
-    def on_draw(self, event):
-        pass
+    # def on_draw(self, event):
+    #     pass
 
 
 if __name__ == "__main__":
-    output_proc = Process(target=VISPYVisualizer.create_visualizer,
-                          args=("visualizer", "human_console_commands"))
-    output_proc.start()
+    human_console = VISPYVisualizer()
+    human_console.run()
+    # output_proc = Process(target=VISPYVisualizer.create_visualizer,
+    #                       args=("visualizer", "human_console_commands"))
+    # output_proc.start()

@@ -139,7 +139,7 @@ class ISBFSAR(Network.node):
         self.fps_s.append(1. / (end - start))
         fps_s = self.fps_s[-10:]
         fps = sum(fps_s) / len(fps_s)
-        elements["fps"] = fps
+        elements["fps_ar"] = fps
 
         # Msg
         if log is not None:
@@ -157,7 +157,7 @@ class ISBFSAR(Network.node):
             data.update(self.last_data)
 
         if not self.commands_queue.empty():
-            msg = self.commands_queue.get()
+            msg = self.commands_queue.get()["msg"]
             msg = msg.strip()
             msg = msg.split()
 
