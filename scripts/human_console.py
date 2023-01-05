@@ -193,7 +193,6 @@ class VISPYVisualizer:
         if not elements:
             return
 
-        print(elements.keys())
 
         # Parse elements
         if "ACK" in elements.keys():  # Just an ack flag
