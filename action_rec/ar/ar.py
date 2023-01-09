@@ -21,8 +21,13 @@ class ActionRecognizer:
         self.ar.cuda()
         self.ar.eval()
 
-        self.support_set = OrderedDict()
-        self.requires_focus = {}
+        # Now
+        self.support_set_data_sk = torch.zeros(way, shot, seq_len, n_joints*3).cuda()
+        self.support_set_mask = torch.zeros(way, shot).cuda()
+        self.support_set_labels = [None] * way
+        self.requires_focus = [None] * way
+        self.support_set_features = None
+
         self.previous_frames = []
         self.seq_len = seq_len
         self.way = way
@@ -37,7 +42,7 @@ class ActionRecognizer:
         if data is None or len(data) == 0:
             return {}, 0, {}
 
-        if len(self.support_set) == 0:  # no class to predict
+        if len(self.support_set_labels) == 0:  # no class to predict
             return {}, 0, {}
 
         # Process new frame
@@ -51,69 +56,75 @@ class ActionRecognizer:
         # Prepare query with previous frames
         for t in list(data.keys()):
             data[t] = torch.stack([elem[t] for elem in self.previous_frames]).unsqueeze(0)
-        labels = torch.IntTensor(list(range(len(self.support_set)))).unsqueeze(0).cuda()
 
         # Get SS
-        ss = None
+        ss = {}
         ss_f = None
-        if all('features' in self.support_set[c].keys() for c in self.support_set.keys()):
-            ss_f = torch.stack([self.support_set[c]["features"] for c in self.support_set.keys()])  # 3 16 90
-            pad = torch.zeros_like(ss_f[0]).unsqueeze(0)
-            while ss_f.shape[0] < self.way:
-                ss_f = torch.concat((ss_f, pad), dim=0)
-            ss_f = ss_f.unsqueeze(0)  # Add batch dimension
-        else:
-            ss = {}
-            if self.input_type in ["rgb", "hybrid"]:
-                ss["rgb"] = torch.stack([self.support_set[c]["imgs"] for c in self.support_set.keys()]).unsqueeze(0)
-            if self.input_type in ["skeleton", "hybrid"]:
-                ss["sk"] = torch.stack([self.support_set[c]["poses"] for c in self.support_set.keys()]).unsqueeze(0)
+        # if self.support_set_features is None:
+        ss['sk'] = self.support_set_data_sk.unsqueeze(0)
+        # else:
+        #     ss_f = self.support_set_features
+        labels = self.support_set_mask.unsqueeze(0)
         with torch.no_grad():
             outputs = self.ar(ss, labels, data, ss_features=ss_f)  # RGB, POSES
 
         # Save support features
         if ss_f is None:
-            for i, s in enumerate(self.support_set.keys()):
-                self.support_set[s]['features'] = outputs['support_features'][0][i]  # zero to remove batch dimension
+            self.support_set_features = outputs['support_features']
 
         # Softmax
-        few_shot_result = torch.softmax(outputs['logits'].squeeze(0), dim=0).detach().cpu().numpy()
+        true_logits = outputs['logits'][:, torch.any(self.support_set_mask, dim=1)]
+        few_shot_result = torch.softmax(true_logits.squeeze(0), dim=0).detach().cpu().numpy()
         open_set_result = outputs['is_true'].squeeze(0).detach().cpu().numpy()
 
         # Return output
         results = {}
-        for k in range(len(self.support_set)):
-            results[list(self.support_set.keys())[k]] = (few_shot_result[k])
+        true_labels = list(filter(lambda x: x is not None, self.support_set_labels))
+        for k in range(len(true_labels)):
+            results[true_labels[k]] = (few_shot_result[k])
         return results, open_set_result, self.requires_focus
 
     def remove(self, flag):
-        if flag in self.support_set.keys():
-            self.support_set.pop(flag)
-            self.requires_focus.pop(flag)
+        # Compute index to remove
+        if flag in self.support_set_labels:
+            class_id = self.support_set_labels.index(flag)
+            self.support_set_labels[class_id] = None
+            self.support_set_mask[class_id] = 0
+            self.requires_focus[class_id] = None
+            self.support_set_data_sk[class_id] = 0
+            self.support_set_features = None
             return True
         else:
             return False
 
     def train(self, inp, ss_id):
-        for c in inp['data'].keys():
-            if inp['flag'] not in self.support_set.keys():
-                empty_sup = torch.zeros_like(torch.FloatTensor(inp['data'][c])).cuda()  # Create empty sample
-                empty_sup = empty_sup.repeat(self.shot, *(1,)*len(empty_sup.size()))  # Repeat shot times
-                self.support_set[inp['flag']] = {c: empty_sup}
-
-            self.support_set[inp['flag']][c][ss_id] = torch.FloatTensor(inp['data'][c]).cuda()
-        self.requires_focus[inp['flag']] = inp['requires_focus']
+        if inp['flag'] not in self.support_set_labels:
+            first_none_pos = self.support_set_labels.index(None)
+            self.support_set_labels[first_none_pos] = inp['flag']
+        class_id = self.support_set_labels.index(inp['flag'])
+        self.support_set_data_sk[class_id][ss_id] = torch.FloatTensor(inp['data']['sk']).cuda()
+        self.requires_focus[class_id] = inp['requires_focus']
+        self.support_set_mask[class_id][ss_id] = 1
+        self.support_set_features = None
 
     def save(self):
-        with open(os.path.join(self.support_set_path, "support_set.pkl"), 'wb') as outfile:
-            pkl.dump(self.support_set, outfile)
+        with open(os.path.join(self.support_set_path, "support_set_labels.pkl"), 'wb') as outfile:
+            pkl.dump(self.support_set_labels, outfile)
+        with open(os.path.join(self.support_set_path, "support_set_data_sk.pkl"), 'wb') as outfile:
+            pkl.dump(self.support_set_data_sk, outfile)
         with open(os.path.join(self.support_set_path, "requires_focus.pkl"), 'wb') as outfile:
             pkl.dump(self.requires_focus, outfile)
+        with open(os.path.join(self.support_set_path, "support_set_mask.pkl"), 'wb') as outfile:
+            pkl.dump(self.support_set_mask, outfile)
         return "Classes saved successfully in " + self.support_set_path
 
     def load(self):
-        with open(os.path.join(self.support_set_path, "support_set.pkl"), 'rb') as pkl_file:
-            self.support_set = pkl.load(pkl_file)
+        with open(os.path.join(self.support_set_path, "support_set_labels.pkl"), 'rb') as pkl_file:
+            self.support_set_labels = pkl.load(pkl_file)
+        with open(os.path.join(self.support_set_path, "support_set_data_sk.pkl"), 'rb') as pkl_file:
+            self.support_set_data_sk = pkl.load(pkl_file)
         with open(os.path.join(self.support_set_path, "requires_focus.pkl"), 'rb') as pkl_file:
             self.requires_focus = pkl.load(pkl_file)
-        return f"Loaded {len(self.support_set)} classes"
+        with open(os.path.join(self.support_set_path, "support_set_mask.pkl"), 'rb') as pkl_file:
+            self.support_set_mask = pkl.load(pkl_file)
+        return f"Loaded {len(self.support_set_labels)} classes"

@@ -3,6 +3,7 @@
 # from queue import Empty, Full
 import os
 import cv2
+
 os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
 from vispy import app, scene, visuals
 from vispy.scene.visuals import Text, Image
@@ -11,9 +12,11 @@ import math
 from pathlib import Path
 from loguru import logger
 import sys
-sys.path.insert(0,  Path(__file__).parent.parent.as_posix())
+
+sys.path.insert(0, Path(__file__).parent.parent.as_posix())
 from utils.logging import setup_logger
 from configs.human_console_config import Logging, Network
+
 setup_logger(level=Logging.level)
 
 """
@@ -30,7 +33,7 @@ def get_color(value):
         return "orange"
     if 0.66 < value <= 1:
         return "green"
-    raise Exception("Wrong argument")
+    raise Exception("Wrong argument:", value)
 
 
 @logger.catch(reraise=True)
@@ -262,7 +265,13 @@ class VISPYVisualizer(Network.node):
             if self.actions is not None:
                 m = max(self.actions.values()) if len(self.actions) > 0 else 0  # Just max
                 for i, action in enumerate(self.actions.keys()):
-                    score = self.actions[action]
+                    if action is None:
+                        continue
+                    # The following line prevent bugs when creating rectangle with no width
+                    if self.actions[action] == 0:
+                        score = 0.001
+                    else:
+                        score = self.actions[action]
                     if action in self.actions_text.keys():  # Action was already in SS
                         text = action
                         self.actions_text[action].text = text
@@ -276,17 +285,17 @@ class VISPYVisualizer(Network.node):
                             self.focuses[action].border_color = 'red' if not self.focus else 'green'
                     else:  # Action must be added in SS
                         # Action label
-                        self.actions_text[action] = Text('', rotation=0, anchor_x="center", anchor_y="center", font_size=12,
-                                                    pos=(3 / 16, 0.6 - (0.1 * i)), color="white")
+                        self.actions_text[action] = Text('', rotation=0, anchor_x="center", anchor_y="center",
+                                                         font_size=12,
+                                                         pos=(3 / 16, 0.6 - (0.1 * i)), color="white")
                         self.b2.add(self.actions_text[action])
-                        # Few Shot Label
                         self.values[action] = scene.visuals.Rectangle(
                             center=(4 / 8 + ((score * 0.25) / 2), 0.6 - (0.1 * i)),
                             color=get_color(score), border_color=get_color(score), height=0.1,
                             width=score * 0.25)
                         self.b2.add(self.values[action])
                         # Eye for focus
-                        if self.requires_focus[action]:
+                        if True:  # self.requires_focus[action]:  # TODO FIX
                             self.focuses[action] = scene.visuals.Rectangle(center=(7 / 16, 0.6 - (0.1 * i)),
                                                                            color='red' if not self.focus else 'green',
                                                                            border_color='red' if not self.focus else 'green',
@@ -295,15 +304,16 @@ class VISPYVisualizer(Network.node):
                     # Os score
                     self.actions_text[action].color = "white"
                     if score == m:
+                        self.is_true = self.is_true + 0.001 if self.is_true < 0.1 else self.is_true
                         self.os_score.width = self.is_true * 0.25
                         self.os_score.center = [(6 / 8) + ((self.is_true * 0.25) / 2), 0.6 - (0.1 * i)]
                         self.os_score.color = get_color(self.is_true)
                         self.os_score.border_color = get_color(self.is_true)
-                        if self.is_true > 0.66:
-                            if self.requires_focus[action]:
-                                self.actions_text[action].color = "green" if self.focus else "orange"
-                            else:
-                                self.actions_text[action].color = "green"
+                        if self.is_true > 0.66:  # TODO FIX
+                            # if self.requires_focus[action]:
+                            #     self.actions_text[action].color = "green" if self.focus else "orange"
+                            # else:
+                            self.actions_text[action].color = "green"
                 # Remove erased action (if any)
                 to_remove = []
                 for key in self.actions_text.keys():

@@ -87,10 +87,13 @@ class TemporalCrossTransformer(nn.Module):
         scores = torch.matmul(mh_queries_ks, mh_support_set_ks.transpose(-1, -2)) / math.sqrt(self.args.trans_linear_out_dim)
         scores = softmax(scores, dim=-1)
         query_prototype = torch.matmul(scores, mh_support_set_vs)
-        query_prototype = torch.mean(query_prototype, dim=2, keepdim=True)
-
+        # print(torch.mean(query_prototype, dim=2, keepdim=True).shape)  # OLD, problem with absent supports
+        query_prototype = torch.sum(query_prototype, dim=2) / torch.sum(support_labels, dim=2).unsqueeze(-1).unsqueeze(-1)  # Division with zero!
+        query_prototype = query_prototype.unsqueeze(2)
+        # print(torch.sum(support_labels, dim=2).unsqueeze(-1).unsqueeze(-1))
         diff = mh_queries_vs - query_prototype
         norm_sq = torch.norm(diff, dim=[-2, -1])**2
+        # print(norm_sq)
         distance = torch.div(norm_sq, self.tuples_len)
         distance = distance * -1
 
@@ -332,9 +335,10 @@ class TRXOS(nn.Module):
             ss_features = torch.concat(features, dim=-1)
 
         # Post ResNet
-        print(torch.count_nonzero(ss_features, dim=(-1, -2)).shape)
-        print(torch.count_nonzero(ss_features, dim=(-1, -2)) > 0)
+        # print(torch.count_nonzero(ss_features, dim=(-1, -2)).shape)
+        # print(torch.count_nonzero(ss_features, dim=(-1, -2)) > 0)
         out = self.transformers[0](ss_features, ss_labels, query_features)
+
         all_logits = out['logits']
 
         chosen_index = torch.argmax(all_logits, dim=1)

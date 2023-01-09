@@ -81,7 +81,7 @@ class ISBFSAR(Network.node):
         elements["rgb"] = img
 
         # Start independent modules
-        self.focus_in.put(img)
+        # self.focus_in.put(img)  # TODO READD
         self.hpe_in.put(img)
 
         # RGB CASE
@@ -127,7 +127,8 @@ class ISBFSAR(Network.node):
         elements["requires_focus"] = requires_focus
 
         # FOCUS #######################################################
-        focus_ret = self.focus_out.get()
+        # focus_ret = self.focus_out.get()  # TODO READD
+        focus_ret = None  # TODO remove
         if focus_ret is not None:
             focus, face = focus_ret
             elements["focus"] = focus
@@ -192,7 +193,9 @@ class ISBFSAR(Network.node):
             return "Action {} is not in the support set".format(flag)
 
     def debug(self):
-        ss = self.ar.support_set
+        ss = self.ar.support_set_data_sk.detach().cpu().numpy()
+        way, shot, _, _ = ss.shape
+        labels = self.ar.support_set_labels
         if len(ss) == 0:
             return "Support set is empty"
         if self.input_type in ["hybrid", "imgs"]:
@@ -205,11 +208,11 @@ class ISBFSAR(Network.node):
                        cv2.resize(ss.swapaxes(0, 1).reshape(8, 224 * n, 224, 3).swapaxes(0, 1).reshape(n * 224, 8 * 224, 3),
                                   (640, 96 * len(ss))))
         if self.input_type in ["hybrid", "skeleton"]:
-            ss = np.stack([ss[c]["poses"].detach().cpu().numpy() for c in ss.keys()])
+            # ss = np.stack([ss[c]["poses"].detach().cpu().numpy() for c in ss.keys()])
             classes = []
             for ss_c in ss:  # FOR EACH CLASS, 5, 16, 90
                 ss_c = ss_c.reshape(ss_c.shape[:-1]+(30, 3))  # 5, 16, 30 , 3
-                size = 100
+                size = 250
                 visual = np.zeros((size*ss_c.shape[0], size*ss_c.shape[1]))
                 ss_c = (ss_c + 1)*(size/2)  # Send each pose from [-1, +1] to [0, size]
                 ss_c = ss_c[..., :2]
@@ -223,6 +226,8 @@ class ISBFSAR(Network.node):
                         visual = cv2.line(visual, pose[edge[0]], pose[edge[1]], (255, 0, 0))
                 classes.append(visual)
             visual = np.concatenate(classes, axis=0)
+            for i, label in enumerate(labels):
+                visual = cv2.putText(visual, label, (10, 10 + i*size*shot), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1, 2)
             cv2.imwrite("SUPPORT_SET.png", visual)
             # cv2.imshow("support_set_SK", visual)
         # cv2.waitKey(0)
@@ -265,11 +270,11 @@ class ISBFSAR(Network.node):
                "requires_focus": requires_focus}
 
         if self.input_type == "rgb":  # Unique case with images in first position
-            inp["data"]["imgs"] = np.stack([x[0] for x in data])
+            inp["data"]["rgb"] = np.stack([x[0] for x in data])
         if self.input_type in ["skeleton", "hybrid"]:
-            inp["data"]["poses"] = np.stack([x[0] for x in data])
+            inp["data"]["sk"] = np.stack([x[0] for x in data])
         if self.input_type == "hybrid":
-            inp["data"]["imgs"] = np.stack([x[1] for x in data])
+            inp["data"]["rgb"] = np.stack([x[1] for x in data])
         self.ar.train(inp, ss_id)
         return "Action " + action_name + " learned successfully!"
 
