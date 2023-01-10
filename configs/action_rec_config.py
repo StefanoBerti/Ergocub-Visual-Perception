@@ -8,7 +8,6 @@ from utils.concurrency.yarppy_node import YarpPyNode
 from utils.confort import BaseConfig
 import platform
 
-
 input_type = "skeleton"  # rgb, skeleton or hybrid
 docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
 seq_len = 8 if input_type != "skeleton" else 16

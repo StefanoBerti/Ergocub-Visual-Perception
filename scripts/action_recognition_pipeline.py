@@ -31,6 +31,7 @@ class ISBFSAR(Network.node):
         self.last_poses = []
         self.skeleton_scale = skeleton_scale
         self.acquisition_time = acquisition_time
+        self.last_time = None
         self.edges = None
         self.focus_in = None
         self.focus_out = None
@@ -70,18 +71,34 @@ class ISBFSAR(Network.node):
         keys: img, bbox, img_preprocessed, human_distance, pose, edges, actions, is_true, requires_focus, focus, face_bbox,
         fps
         """
-        start = time.time()
-        elements = copy.deepcopy(Logging.keys)
+        # Add default keys:values
+        elements = {}
+        elements.update(copy.deepcopy(Logging.keys))
 
-        ar_input = {}
+        # Cap fps
+        if self.last_time is not None:
+            while (time.time() - self.last_time) < 1 / 16:
+                time.sleep(0.01)
+            self.fps_s.append(1. / (time.time() - self.last_time))
+            fps_s = self.fps_s[-10:]
+            fps = sum(fps_s) / len(fps_s)
+            elements["fps_ar"] = fps
+        self.last_time = time.time()
 
         # If img is not given (not a video), try to get img
         if img is None:
             img = self._recv()["rgb"]
         elements["rgb"] = img
 
+        # Msg
+        if log is not None:
+            self.last_log = log
+        elements["log"] = self.last_log
+
+        ar_input = {}
+
         # Start independent modules
-        # self.focus_in.put(img)  # TODO READD
+        self.focus_in.put(img)
         self.hpe_in.put(img)
 
         # RGB CASE
@@ -127,25 +144,11 @@ class ISBFSAR(Network.node):
         elements["requires_focus"] = requires_focus
 
         # FOCUS #######################################################
-        # focus_ret = self.focus_out.get()  # TODO READD
-        focus_ret = None  # TODO remove
+        focus_ret = self.focus_out.get()
         if focus_ret is not None:
             focus, face = focus_ret
             elements["focus"] = focus
             elements["face_bbox"] = face.bbox.reshape(-1)
-
-        end = time.time()
-
-        # Compute fps
-        self.fps_s.append(1. / (end - start))
-        fps_s = self.fps_s[-10:]
-        fps = sum(fps_s) / len(fps_s)
-        elements["fps_ar"] = fps
-
-        # Msg
-        if log is not None:
-            self.last_log = log
-        elements["log"] = self.last_log
 
         return elements
 
@@ -181,6 +184,10 @@ class ISBFSAR(Network.node):
 
             elif msg[0] == "debug":
                 log = self.debug()
+
+            elif msg[0] == "edit_focus":
+                log = self.ar.edit_focus(msg[1], msg[2])
+
             else:
                 log = "Not a valid command!"
         d = self.get_frame(img=data["rgb"], log=log)
@@ -213,8 +220,10 @@ class ISBFSAR(Network.node):
             for ss_c in ss:  # FOR EACH CLASS, 5, 16, 90
                 ss_c = ss_c.reshape(ss_c.shape[:-1]+(30, 3))  # 5, 16, 30 , 3
                 size = 250
+                zoom = 2
                 visual = np.zeros((size*ss_c.shape[0], size*ss_c.shape[1]))
                 ss_c = (ss_c + 1)*(size/2)  # Send each pose from [-1, +1] to [0, size]
+                ss_c *= zoom
                 ss_c = ss_c[..., :2]
                 ss_c[..., 1] += np.arange(ss_c.shape[0])[..., None, None].repeat(ss_c.shape[1], axis=1)*size
                 ss_c[..., 0] += np.arange(ss_c.shape[1])[None, ..., None].repeat(ss_c.shape[0], axis=0)*size

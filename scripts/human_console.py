@@ -1,6 +1,3 @@
-# from multiprocessing import Process
-# from multiprocessing.managers import BaseManager
-# from queue import Empty, Full
 import os
 import cv2
 
@@ -56,11 +53,6 @@ class VISPYVisualizer(Network.node):
         else:
             self.input_text += x.text
         self.input_string.text = self.input_text
-
-    # @staticmethod
-    # def create_visualizer(qi, qo):
-    #     _ = VISPYVisualizer(qi, qo)
-    #     app.run()
 
     def __init__(self):
         super().__init__(**Network.Args.to_dict())
@@ -158,6 +150,9 @@ class VISPYVisualizer(Network.node):
         self.desc_remove = Text('REMOVE ACTION: remove action_name', color='white', rotation=0, anchor_x="left",
                                 anchor_y="bottom",
                                 font_size=10, pos=(0.1, 0.5))
+        self.edit_focus = Text('EDIT FOCUS: edit_focus action_name value', color='white', rotation=0, anchor_x="left",
+                                anchor_y="bottom",
+                                font_size=10, pos=(0.1, 0.4))
         self.input_string = Text(self.input_text, color='purple', rotation=0, anchor_x="left", anchor_y="bottom",
                                  font_size=12, pos=(0.1, 0.3))
         self.log_text = Text('', color='orange', rotation=0, anchor_x="left", anchor_y="bottom",
@@ -167,6 +162,7 @@ class VISPYVisualizer(Network.node):
         b4.add(self.desc_load)
         b4.add(self.desc_debug)
         b4.add(self.desc_remove)
+        b4.add(self.edit_focus)
         b4.add(self.input_string)
         b4.add(self.log_text)
 
@@ -187,10 +183,6 @@ class VISPYVisualizer(Network.node):
     def loop(self, elements):
         if not elements:
             return
-
-        # Parse elements
-        # if "ACK" in elements.keys():  # Just an ack flag
-        #     return
 
         # LOG
         if "log" in elements.keys():
@@ -295,7 +287,7 @@ class VISPYVisualizer(Network.node):
                             width=score * 0.25)
                         self.b2.add(self.values[action])
                         # Eye for focus
-                        if True:  # self.requires_focus[action]:  # TODO FIX
+                        if self.requires_focus[i]:
                             self.focuses[action] = scene.visuals.Rectangle(center=(7 / 16, 0.6 - (0.1 * i)),
                                                                            color='red' if not self.focus else 'green',
                                                                            border_color='red' if not self.focus else 'green',
@@ -309,11 +301,11 @@ class VISPYVisualizer(Network.node):
                         self.os_score.center = [(6 / 8) + ((self.is_true * 0.25) / 2), 0.6 - (0.1 * i)]
                         self.os_score.color = get_color(self.is_true)
                         self.os_score.border_color = get_color(self.is_true)
-                        if self.is_true > 0.66:  # TODO FIX
-                            # if self.requires_focus[action]:
-                            #     self.actions_text[action].color = "green" if self.focus else "orange"
-                            # else:
-                            self.actions_text[action].color = "green"
+                        if self.is_true > 0.66:
+                            if self.requires_focus[i]:
+                                self.actions_text[action].color = "green" if self.focus else "orange"
+                            else:
+                                self.actions_text[action].color = "green"
                 # Remove erased action (if any)
                 to_remove = []
                 for key in self.actions_text.keys():
@@ -332,13 +324,7 @@ class VISPYVisualizer(Network.node):
         app.process_events()
         return {}
 
-    # def on_draw(self, event):
-    #     pass
-
 
 if __name__ == "__main__":
     human_console = VISPYVisualizer()
     human_console.run()
-    # output_proc = Process(target=VISPYVisualizer.create_visualizer,
-    #                       args=("visualizer", "human_console_commands"))
-    # output_proc.start()

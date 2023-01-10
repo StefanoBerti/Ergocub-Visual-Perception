@@ -69,8 +69,8 @@ class ActionRecognizer:
             outputs = self.ar(ss, labels, data, ss_features=ss_f)  # RGB, POSES
 
         # Save support features
-        if ss_f is None:
-            self.support_set_features = outputs['support_features']
+        # if ss_f is None:
+        #     self.support_set_features = outputs['support_features']
 
         # Softmax
         true_logits = outputs['logits'][:, torch.any(self.support_set_mask, dim=1)]
@@ -96,6 +96,14 @@ class ActionRecognizer:
             return True
         else:
             return False
+
+    def edit_focus(self, flag, value):
+        if flag not in self.support_set_labels:
+            return flag + " is not in the support set"
+        else:
+            index = self.support_set_labels.index(flag)
+        self.requires_focus[index] = bool(value)
+        return flag + " now has focus value " + value
 
     def train(self, inp, ss_id):
         if inp['flag'] not in self.support_set_labels:
