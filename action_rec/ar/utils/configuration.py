@@ -2,16 +2,15 @@ import os
 import platform
 
 
-input_type = "skeleton"  # rgb, skeleton or hybrid
+# input_type = "skeleton"  # rgb, skeleton or hybrid
 docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
-seq_len = 8 if input_type != "skeleton" else 16
 ubuntu = platform.system() == "Linux"
 base_dir = "ISBFSAR"
 engine_dir = "engines" if not docker else os.path.join("engines", "docker")
 
 
 class TRXTrainConfig(object):
-    def __init__(self):
+    def __init__(self, input_type="skeleton"):
         # MAIN
         self.model = "DISC"  # DISC or EXP
         self.input_type = input_type  # skeleton or rgb
@@ -56,4 +55,4 @@ class TRXTrainConfig(object):
             self.final_ckpt_path = os.path.join(base_dir, "modules", "ar", "modules", "raws", "hybrid",
                                                 "1714_truncated_resnet.pth")
         self.trt_path = os.path.join(base_dir, "modules", "ar", engine_dir, "trx.engine")
-        self.seq_len = seq_len
+        self.seq_len = 8 if input_type != "skeleton" else 16

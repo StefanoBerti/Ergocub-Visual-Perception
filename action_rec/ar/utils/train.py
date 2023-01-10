@@ -2,7 +2,6 @@ import os
 from datetime import datetime
 import torch
 from torch.optim.lr_scheduler import MultiStepLR
-import wandb
 from tqdm import tqdm
 from action_rec.ar.utils.configuration import TRXTrainConfig, ubuntu
 from action_rec.ar.utils.dataloader import MyLoader
@@ -12,6 +11,9 @@ from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 import numpy as np
+
+if ubuntu:
+    import wandb
 
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
@@ -24,7 +26,7 @@ import numpy as np
 
 
 if __name__ == "__main__":
-    args = TRXTrainConfig()
+    args = TRXTrainConfig(input_type="rgb")
 
     b = args.batch_size
     device = args.device
