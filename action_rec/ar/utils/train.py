@@ -118,17 +118,17 @@ if __name__ == "__main__":
             target_set = {t: elem['target_set'][t].float().to(device) for t in elem['target_set'].keys()}
             unknown_set = {t: elem['unknown_set'][t].float().to(device) for t in elem['unknown_set'].keys()}
 
-            support_labels = elem['support_classes'].float().to(device)
             target = (elem['support_classes'] == elem['target_class'][..., None]).float().to(device)
 
             ################
             # Known action #
             ################
+            support_mask = torch.full((1, 5, 5), 1.).float().cuda()
             if not do_eval:
-                out = model(support_set, support_labels, target_set)
+                out = model(support_set, support_mask, target_set)
             else:
                 with torch.no_grad():
-                    out = model(support_set, support_labels, target_set)
+                    out = model(support_set, support_mask, target_set)
 
             # FS known
             fs_pred = out['logits']
@@ -166,7 +166,7 @@ if __name__ == "__main__":
                     ##################
                     # Unknown action #
                     ##################
-                    out = model(support_set, support_labels, unknown_set)
+                    out = model(support_set, support_mask, unknown_set)
 
                     # OS unknown
                     os_pred = out['is_true']

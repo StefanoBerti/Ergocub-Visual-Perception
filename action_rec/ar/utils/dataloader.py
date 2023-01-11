@@ -171,13 +171,14 @@ if __name__ == "__main__":
     from action_rec.hpe.utils.matplotlib_visualizer import MPLPosePrinter
     from action_rec.ar.utils.configuration import TRXTrainConfig
 
-    input_type = "hybrid"
+    input_type = "rgb"
 
     loader = MyLoader(TRXTrainConfig().data_path, input_type=input_type, given_122=not ubuntu,
                       do_augmentation=False, support_classes=['cross_toe_touch', 'cutting_paper_(using_scissors)', 'drink_water', 'eat_meal-snack', 'drop'],
                       query_class='apply_cream_on_face',
                       unknown_class='apply_cream_on_face')
-    vis = MPLPosePrinter()
+    if input_type in ["skeleton", "hybrid"]:
+        vis = MPLPosePrinter()
 
     for asd in loader:
         sup = asd['support_set']
@@ -186,7 +187,7 @@ if __name__ == "__main__":
         lab = asd["support_classes"]
 
         print(asd['support_classes'])
-        n_classes, n_examples, n_frames, _, _ = sup["sk"].shape
+        n_classes, n_examples, n_frames = sup[list(sup.keys())[0]].shape[:3]
         for c in range(n_classes):
             for n in range(n_examples):
                 for k in range(n_frames):

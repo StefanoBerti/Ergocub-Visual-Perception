@@ -313,8 +313,10 @@ class TRXOS(nn.Module):
         features = []
         if "rgb" in query_data.keys():
             b, l, c, h, w = query_data["rgb"].size()
-            target_features_rgb = self.features_extractor['rgb'](query_data["rgb"].reshape(-1, c, h, w)).reshape(b, l,-1)
+            target_features_rgb = self.features_extractor['rgb'](query_data["rgb"].reshape(-1, c, h, w))
+            target_features_rgb = target_features_rgb.reshape(b*l, -1)  # Remove last two dimension (1, 1)
             target_features_rgb = self.post_resnet(target_features_rgb)
+            target_features_rgb = target_features_rgb.reshape(b, l, -1)
             features.append(target_features_rgb)
         if "sk" in query_data.keys():
             target_features_sk = self.features_extractor['sk'](query_data["sk"])
@@ -325,9 +327,11 @@ class TRXOS(nn.Module):
         if ss_features is None:
             features = []
             if "rgb" in ss_data.keys():
-                b, k, l, c, h, w = ss_data["rgb"].size()
-                context_features_rgb = self.features_extractor['rgb'](ss_data["rgb"].reshape(-1, c, h, w)).reshape(b, k, l, -1)
+                b, k, n, l, c, h, w = ss_data["rgb"].size()
+                context_features_rgb = self.features_extractor['rgb'](ss_data["rgb"].reshape(-1, c, h, w))
+                context_features_rgb = context_features_rgb.reshape(b*k*n*l, -1)
                 context_features_rgb = self.post_resnet(context_features_rgb)
+                context_features_rgb = context_features_rgb.reshape(b, k, n, l, -1)
                 features.append(context_features_rgb)
             if "sk" in ss_data.keys():
                 context_features_sk = self.features_extractor['sk'](ss_data["sk"])

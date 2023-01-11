@@ -28,7 +28,7 @@ class TRXTrainConfig(object):
         self.initial_lr = 1e-2 if self.input_type == "skeleton" else 3e-4
         self.n_task = (100 if self.input_type == "skeleton" else 30) if not ubuntu else (1000 if self.input_type == "skeleton" else 500)
         self.optimize_every = 1  # Put to 1 if not used, not 0 or -1!
-        self.batch_size = 4 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
+        self.batch_size = 1 if not ubuntu else (32 if self.input_type == "skeleton" else 4)
         self.n_epochs = 10000
         self.start_discriminator_after_epoch = 0  # self.n_epochs  # TODO CAREFUL
         self.first_mile = self.n_epochs  # 15 TODO CAREFUL
@@ -38,7 +38,7 @@ class TRXTrainConfig(object):
         self.eval_every_n_epoch = 10
 
         # MODEL
-        self.trans_linear_in_dim = 256 if self.input_type == "skeleton" else 1000 if self.input_type == "rgb" else 512
+        self.trans_linear_in_dim = 512 if self.input_type == "hybrid" else 256
         self.trans_linear_out_dim = 128
         self.query_per_class = 1
         self.trans_dropout = 0.
