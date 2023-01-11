@@ -123,7 +123,8 @@ class Sink(Network.node):
                 if self.is_true > 0.66:
                     textsize = cv2.getTextSize(best, cv2.FONT_ITALIC, 1, 2)[0]
                     textX = int((img.shape[1] - textsize[0]) / 2)
-                    text_color = (0, 255, 0)  # if not self.requires_focus[best] or (self.requires_focus[best] and focus) else (230, 172, 37)
+                    best_index = list(self.actions.keys()).index(best)
+                    text_color = (0, 255, 0) if not self.requires_focus[best_index] or (self.requires_focus[best_index] and focus) else (230, 172, 37)
                     img = cv2.putText(img, best, (textX, 450), cv2.FONT_ITALIC, 1, text_color, 2, cv2.LINE_AA)
 
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
