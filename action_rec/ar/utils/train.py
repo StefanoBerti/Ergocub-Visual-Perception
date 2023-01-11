@@ -15,6 +15,8 @@ import numpy as np
 if ubuntu:
     import wandb
 
+input_type = "rgb"
+
 
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gres=gpu:1 --cpus-per-task=32 --mem=8G bash
 # srun --partition=main --ntasks=1 --nodes=1 --nodelist=gnode04 --pty --gpus-per-node=4 --cpus-per-task=32 --mem=8G bash
@@ -26,7 +28,7 @@ if ubuntu:
 
 
 if __name__ == "__main__":
-    args = TRXTrainConfig(input_type="rgb")
+    args = TRXTrainConfig(input_type=input_type)
 
     b = args.batch_size
     device = args.device
@@ -58,9 +60,9 @@ if __name__ == "__main__":
         model.distribute_model()
 
     # Create dataset iterator
-    train_data = MyLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type, l=args.seq_len,
+    train_data = MyLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type,
                           n=args.shot, given_122=not ubuntu, do_augmentation=True)
-    valid_data = MyLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type, l=args.seq_len,
+    valid_data = MyLoader(args.data_path, k=args.way, n_task=args.n_task, input_type=args.input_type,
                           n=args.shot, given_122=not ubuntu, do_augmentation=False)
 
     all_classes = list(filter(lambda x: x not in test_classes, train_data.all_classes))

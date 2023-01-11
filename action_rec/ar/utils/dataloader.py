@@ -5,7 +5,7 @@ import torch.utils.data as data
 import random
 import numpy as np
 import cv2
-from action_rec.ar.utils.configuration import seq_len, ubuntu
+from action_rec.ar.utils.configuration import ubuntu
 
 
 # https://rose1.ntu.edu.sg/dataset/actionRecognition/
@@ -149,89 +149,11 @@ class MyLoader(data.Dataset):
         return self.n_task
 
 
-class FSOSEpisodicLoader(data.Dataset):
-    """
-    Loader used to compute FSOS score and similarity matrix.
-    For FSOS, pass query path, exemplars path and a list of classes s.t. their exemplars are added inside ss.
-    To compute similarity matrix for discriminator, just put one element in support classes and pass query class
-    """
-
-    def __init__(self, queries_path, exemplars_path, support_classes, l=16, input_type="hybrid", query_class=None,
-                 skeleton="smpl+head_30"):
-        self.queries_path = queries_path
-        self.exemplars_path = exemplars_path
-        self.all_test_classes = next(os.walk(self.exemplars_path))[1]
-        self.support_classes = [next(os.walk(self.exemplars_path))[1][i] for i in support_classes]
-        self.l = l
-        self.input_type = input_type
-        self.queries = []
-        for q in self.all_test_classes:
-            if query_class:
-                if q != query_class:
-                    continue
-            for class_dir in next(os.walk(os.path.join(queries_path, q)))[1]:
-                self.queries.append(os.path.join(queries_path, q, class_dir))
-        self.support_set = [self.load_sample(os.path.join(self.exemplars_path, cl, "0")) for cl in self.support_classes]
-        self.tapullo = None
-        self.skeleton = skeleton
-        with open(f'assets/{self.skeleton}.pkl', "rb") as input_file:
-            skeleton_types = pickle.load(input_file)
-        self.edges = skeleton_types[skeleton]['edges']
-        self.indices = skeleton_types[skeleton]['indices']
-
-    def load_sample(self, path):
-        imgs = []
-        poses = []
-        i = 0
-        while True:  # Load one image at time
-            with open(os.path.join(path, f"{i}.pkl"), 'rb') as file:
-                # Load skeleton
-                pose = pickle.load(file)
-                poses.append(pose.reshape(-1)[self.indices])
-                # Load image
-                img = cv2.imread(os.path.join(path, f"{i}.png"))
-                img = cv2.resize(img, (224, 224))
-                img = img / 255.
-                img = (img * np.array([0.229, 0.224, 0.225])) + np.array([0.485, 0.456, 0.406])
-                imgs.append(img.swapaxes(-1, -2).swapaxes(-2, -3))
-                i += 1
-            if len(poses) == self.l:
-                break
-        if seq_len == 8:
-            chosen = list(range(0, 16, 2))
-            return np.stack(imgs)[chosen], np.stack(poses)[chosen]
-        return np.stack(imgs), np.stack(poses)
-
-    def __getitem__(self, i):  # Must return complete, imp_x and impl_y
-
-        try:
-            target_set = self.load_sample(self.queries[i])
-        except Exception as e:
-            print(e, i)
-            target_set = self.tapullo
-        if self.tapullo is None:
-            self.tapullo = target_set
-        query_class = self.queries[i].split("\\" if not ubuntu else "/")[-2]
-        known = query_class in self.support_classes
-
-        c = copy.deepcopy
-        return {'support_set': {"rgb": c(np.stack([x[0] for x in self.support_set])),
-                                "sk": c(np.stack([x[1] for x in self.support_set]))},
-                'target_set': {"rgb": c(target_set[0]),
-                               "sk": c(target_set[1])},
-                'support_classes': c(np.stack([self.all_test_classes.index(x) for x in self.support_classes])),
-                'target_class': c(self.all_test_classes.index(query_class)),
-                'known': c(known)}
-
-    def __len__(self):
-        return len(self.queries)
-
-
 if __name__ == "__main__":
     from action_rec.hpe.utils.matplotlib_visualizer import MPLPosePrinter
     from action_rec.ar.utils.configuration import TRXTrainConfig
 
-    loader = MyLoader(TRXTrainConfig().data_path, input_type="skeleton", given_122=True, l=16, do_augmentation=True)
+    loader = MyLoader("/media/sberti/Data/datasets/NTURGBD_to_YOLO_METRO_122", input_type="rgb", given_122=True, l=16, do_augmentation=True)
     vis = MPLPosePrinter()
 
     for asd in loader:
@@ -245,9 +167,9 @@ if __name__ == "__main__":
         for c in range(n_classes):
             for n in range(n_examples):
                 for k in range(n_frames):
-                    # cv2.imshow("sup", sup["rgb"][c][k].swapaxes(0, 1).swapaxes(1, 2))
-                    # cv2.waitKey(1)
-                    vis.set_title(f"{loader.all_classes[lab[c]]}, {n}, {k}")
-                    vis.clear()
-                    vis.print_pose(sup["sk"][c][n][k].reshape(-1, 3), loader.edges)
-                    vis.sleep(0.1)
+                    cv2.imshow("sup", sup["rgb"][c][k].swapaxes(0, 1).swapaxes(1, 2))
+                    cv2.waitKey(1)
+                    # vis.set_title(f"{loader.all_classes[lab[c]]}, {n}, {k}")
+                    # vis.clear()
+                    # vis.print_pose(sup["sk"][c][n][k].reshape(-1, 3), loader.edges)
+                    # vis.sleep(0.1)
