@@ -50,7 +50,7 @@ class TRXTrainConfig(object):
         if input_type == "rgb":
             self.final_ckpt_path = os.path.join(base_dir, "modules", "ar", "modules", "raws", "rgb", "3000.pth")
         elif input_type == "skeleton":
-            self.final_ckpt_path = os.path.join(base_dir, "modules", "ar", "modules", "raws", "DISC.pth")
+            self.final_ckpt_path = os.path.join(base_dir, "modules", "ar", "modules", "raws", "5-w-1-s.pth")
         elif input_type == "hybrid":
             self.final_ckpt_path = os.path.join(base_dir, "modules", "ar", "modules", "raws", "hybrid",
                                                 "1714_truncated_resnet.pth")

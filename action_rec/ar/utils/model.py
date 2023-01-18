@@ -289,10 +289,9 @@ class TRXOS(nn.Module):
         if args.input_type in ["rgb", "hybrid"]:
             if add_hook:
                 resnet = self.myresnet50(pretrained=True)
-                self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])
             else:
                 resnet = resnet50(pretrained=True)
-                self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])
+            self.features_extractor["rgb"] = nn.Sequential(*list(resnet.children())[:-1])
 
         self.transformers = nn.ModuleList([TemporalCrossTransformer(args, s, add_hook=add_hook) for s in args.temp_set])
 

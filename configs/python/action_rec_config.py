@@ -100,7 +100,7 @@ class AR(BaseConfig):
         if input_type == "rgb":
             final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "rgb", "3000.pth")
         elif input_type == "skeleton":
-            final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "DISC.pth")
+            final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "5-w-1-s.pth")
         elif input_type == "hybrid":
             final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "hybrid",
                                            "1714_truncated_resnet.pth")

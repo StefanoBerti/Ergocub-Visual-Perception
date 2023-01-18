@@ -13,7 +13,7 @@ class ActionRecognizer:
         self.input_type = input_type
         self.device = device
 
-        self.ar = TRXOS(TRXTrainConfig(), add_hook=add_hook)
+        self.ar = TRXOS(TRXTrainConfig(input_type=input_type), add_hook=add_hook)
         # Fix dataparallel
         state_dict = torch.load(final_ckpt_path, map_location=torch.device(0))['model_state_dict']
         state_dict = OrderedDict({param.replace('.module', ''): data for param, data in state_dict.items()})
@@ -22,7 +22,11 @@ class ActionRecognizer:
         self.ar.eval()
 
         # Now
-        self.support_set_data_sk = torch.zeros(way, shot, seq_len, n_joints*3).cuda()
+        self.support_set_data = {}
+        if input_type in ["skeleton", "hybrid"]:
+            self.support_set_data["sk"] = torch.zeros(way, shot, seq_len, n_joints*3).cuda()
+        if input_type in ["rgb", "hybrid"]:
+            self.support_set_data["rgb"] = torch.zeros(way, shot, seq_len, 3, 224, 224).cuda()
         self.support_set_mask = torch.zeros(way, shot).cuda()
         self.support_set_labels = [None] * way
         self.requires_focus = [None] * way
@@ -60,17 +64,20 @@ class ActionRecognizer:
         # Get SS
         ss = {}
         ss_f = None
-        # if self.support_set_features is None:
-        ss['sk'] = self.support_set_data_sk.unsqueeze(0)
-        # else:
-        #     ss_f = self.support_set_features
+        if self.support_set_features is None:
+            if self.input_type in ["skeleton", "hybrid"]:
+                ss['sk'] = self.support_set_data["sk"].unsqueeze(0)
+            if self.input_type in ["rgb", "hybrid"]:
+                ss['rgb'] = self.support_set_data["rgb"].unsqueeze(0)
+        else:
+            ss_f = self.support_set_features
         labels = self.support_set_mask.unsqueeze(0)
         with torch.no_grad():
             outputs = self.ar(ss, labels, data, ss_features=ss_f)  # RGB, POSES
 
         # Save support features
-        # if ss_f is None:
-        #     self.support_set_features = outputs['support_features']
+        if self.support_set_features is None:
+            self.support_set_features = outputs['support_features']
 
         # Softmax
         true_logits = outputs['logits'][:, torch.any(self.support_set_mask, dim=1)]
@@ -91,7 +98,10 @@ class ActionRecognizer:
             self.support_set_labels[class_id] = None
             self.support_set_mask[class_id] = 0
             self.requires_focus[class_id] = None
-            self.support_set_data_sk[class_id] = 0
+            if self.input_type in ["skeleton", "hybrid"]:
+                self.support_set_data["sk"][class_id] = 0
+            if self.input_type in ["rgb", "hybrid"]:
+                self.support_set_data["rgb"][class_id] = 0
             self.support_set_features = None
             return True
         else:
@@ -107,32 +117,54 @@ class ActionRecognizer:
 
     def train(self, inp, ss_id):
         if inp['flag'] not in self.support_set_labels:
-            first_none_pos = self.support_set_labels.index(None)
+            if None in self.support_set_labels:
+                first_none_pos = self.support_set_labels.index(None)
+            else:
+                return False
             self.support_set_labels[first_none_pos] = inp['flag']
         class_id = self.support_set_labels.index(inp['flag'])
-        self.support_set_data_sk[class_id][ss_id] = torch.FloatTensor(inp['data']['sk']).cuda()
+        if self.input_type in ["skeleton", "hybrid"]:
+            self.support_set_data["sk"][class_id][ss_id] = torch.FloatTensor(inp['data']['sk']).cuda()
+        if self.input_type in ["rgb", "hybrid"]:
+            self.support_set_data["rgb"][class_id][ss_id] = torch.FloatTensor(inp['data']['rgb']).cuda()
         self.requires_focus[class_id] = inp['requires_focus']
         self.support_set_mask[class_id][ss_id] = 1
         self.support_set_features = None
+        return True
 
     def save(self):
         with open(os.path.join(self.support_set_path, "support_set_labels.pkl"), 'wb') as outfile:
             pkl.dump(self.support_set_labels, outfile)
-        with open(os.path.join(self.support_set_path, "support_set_data_sk.pkl"), 'wb') as outfile:
-            pkl.dump(self.support_set_data_sk, outfile)
+
+        if self.input_type in ["skeleton", "hybrid"]:
+            with open(os.path.join(self.support_set_path, "support_set_data_sk.pkl"), 'wb') as outfile:
+                pkl.dump(self.support_set_data["sk"], outfile)
+        if self.input_type in ["rgb", "hybrid"]:
+            with open(os.path.join(self.support_set_path, "support_set_data_rgb.pkl"), 'wb') as outfile:
+                pkl.dump(self.support_set_data["rgb"], outfile)
+
         with open(os.path.join(self.support_set_path, "requires_focus.pkl"), 'wb') as outfile:
             pkl.dump(self.requires_focus, outfile)
         with open(os.path.join(self.support_set_path, "support_set_mask.pkl"), 'wb') as outfile:
             pkl.dump(self.support_set_mask, outfile)
+
         return "Classes saved successfully in " + self.support_set_path
 
     def load(self):
         with open(os.path.join(self.support_set_path, "support_set_labels.pkl"), 'rb') as pkl_file:
             self.support_set_labels = pkl.load(pkl_file)
-        with open(os.path.join(self.support_set_path, "support_set_data_sk.pkl"), 'rb') as pkl_file:
-            self.support_set_data_sk = pkl.load(pkl_file)
+
+        if self.input_type in ["skeleton", "hybrid"]:
+            with open(os.path.join(self.support_set_path, "support_set_data_sk.pkl"), 'rb') as pkl_file:
+                self.support_set_data["sk"] = pkl.load(pkl_file)
+        if self.input_type in ["rgb", "hybrid"]:
+            with open(os.path.join(self.support_set_path, "support_set_data_rgb.pkl"), 'rb') as pkl_file:
+                self.support_set_data["rgb"] = pkl.load(pkl_file)
+
         with open(os.path.join(self.support_set_path, "requires_focus.pkl"), 'rb') as pkl_file:
             self.requires_focus = pkl.load(pkl_file)
         with open(os.path.join(self.support_set_path, "support_set_mask.pkl"), 'rb') as pkl_file:
             self.support_set_mask = pkl.load(pkl_file)
+
+        self.support_set_features = None
         return f"Loaded {len(self.support_set_labels)} classes"

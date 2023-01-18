@@ -8,7 +8,8 @@ from utils.concurrency.yarppy_node import YarpPyNode
 from utils.confort import BaseConfig
 import platform
 
-input_type = "skeleton"  # rgb, skeleton or hybrid
+
+input_type = "rgb"  # rgb, skeleton or hybrid
 docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
 seq_len = 8 if input_type != "skeleton" else 16
 ubuntu = platform.system() == "Linux"
@@ -108,9 +109,9 @@ class AR(BaseConfig):
         support_set_path = os.path.join(base_dir, "ar", "assets", "saved")
 
         if input_type == "rgb":
-            final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "rgb", "3000.pth")
+            final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "rgb", "5-w-5-s.pth")
         elif input_type == "skeleton":
-            final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "481.pth")
+            final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "skeleton", "5-w-5-s.pth")
         elif input_type == "hybrid":
             final_ckpt_path = os.path.join(base_dir, "ar", "weights", "raws", "hybrid",
                                            "1714_truncated_resnet.pth")

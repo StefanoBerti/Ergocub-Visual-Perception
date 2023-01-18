@@ -105,7 +105,7 @@ class ISBFSAR(Network.node):
         hpe_res = self.hpe_out.get()
         if self.input_type == "hybrid" or self.input_type == "rgb":
             if hpe_res is not None:
-                x1, x2, y1, y2 = hpe_res['bbox']
+                x1, y1, x2, y2 = hpe_res['bbox']
                 elements["bbox"] = x1, x2, y1, y2
                 xm = int((x1 + x2) / 2)
                 ym = int((y1 + y2) / 2)
@@ -200,24 +200,35 @@ class ISBFSAR(Network.node):
             return "Action {} is not in the support set".format(flag)
 
     def debug(self):
-        ss = self.ar.support_set_data_sk.detach().cpu().numpy()
-        way, shot, _, _ = ss.shape
+        ss = self.ar.support_set_data
+
         labels = self.ar.support_set_labels
         if len(ss) == 0:
             return "Support set is empty"
-        if self.input_type in ["hybrid", "imgs"]:
-            ss = np.stack([ss[c]["imgs"].detach().cpu().numpy() for c in ss.keys()])
-            ss = ss.swapaxes(-2, -3).swapaxes(-1, -2)
-            ss = (ss - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
-            ss = (ss * 255).astype(np.uint8)
-            n = len(ss)
-            cv2.imshow("support_set_RGB",
-                       cv2.resize(ss.swapaxes(0, 1).reshape(8, 224 * n, 224, 3).swapaxes(0, 1).reshape(n * 224, 8 * 224, 3),
-                                  (640, 96 * len(ss))))
+        if self.input_type in ["hybrid", "rgb"]:
+            ss_rgb = ss["rgb"].detach().cpu().numpy()
+            ss_rgb = ss_rgb.swapaxes(-2, -3).swapaxes(-1, -2)
+            ss_rgb = (ss_rgb - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
+            ss_rgb = (ss_rgb * 255).astype(np.uint8)
+            way, shot, seq_len, height, width, _ = ss_rgb.shape
+            # Flat image
+            # ss_rgb = ss_rgb.swapaxes(0, 2)
+            # ss_rgb = ss_rgb.reshape(seq_len, shot, way*height, width, 3)
+            sequences = []
+            for w in range(way):
+                for s in range(shot):
+                    sequences.append(ss_rgb[w][s].swapaxes(0, 1).reshape(height, seq_len*width, 3))
+            ss_rgb = np.concatenate(sequences, axis=0)
+            cv2.imwrite("SUPPORT_SET.png", ss_rgb)
+            # cv2.imshow("support_set_RGB",
+            #            cv2.resize(ss_rgb.swapaxes(0, 1).reshape(8, 224 * n, 224, 3).swapaxes(0, 1).reshape(n * 224, 8 * 224, 3),
+            #                       (640, 96 * len(ss_rgb))))
         if self.input_type in ["hybrid", "skeleton"]:
             # ss = np.stack([ss[c]["poses"].detach().cpu().numpy() for c in ss.keys()])
             classes = []
-            for ss_c in ss:  # FOR EACH CLASS, 5, 16, 90
+            ss_sk = ss["sk"].detach().cpu().numpy()
+            way, shot, _, _ = ss.shape
+            for ss_c in ss_sk:  # FOR EACH CLASS, 5, 16, 90
                 ss_c = ss_c.reshape(ss_c.shape[:-1]+(30, 3))  # 5, 16, 30 , 3
                 size = 250
                 zoom = 2
@@ -227,6 +238,8 @@ class ISBFSAR(Network.node):
                 ss_c = ss_c[..., :2]
                 ss_c[..., 1] += np.arange(ss_c.shape[0])[..., None, None].repeat(ss_c.shape[1], axis=1)*size
                 ss_c[..., 0] += np.arange(ss_c.shape[1])[None, ..., None].repeat(ss_c.shape[0], axis=0)*size
+                ss_c[..., 1] -= size/2
+                ss_c[..., 0] -= size/2
                 ss_c = ss_c.reshape(-1, 30, 2).astype(int)
                 for pose in ss_c:
                     for point in pose:
@@ -284,8 +297,11 @@ class ISBFSAR(Network.node):
             inp["data"]["sk"] = np.stack([x[0] for x in data])
         if self.input_type == "hybrid":
             inp["data"]["rgb"] = np.stack([x[1] for x in data])
-        self.ar.train(inp, ss_id)
-        return "Action " + action_name + " learned successfully!"
+        ret = self.ar.train(inp, ss_id)
+        if ret:
+            return "Action " + action_name + " learned successfully!"
+        else:
+            return "Cannot add action"
 
 
 def run_module(module, input_queue, output_queue):
