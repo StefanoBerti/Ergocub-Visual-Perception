@@ -38,6 +38,7 @@ class MAIN(BaseConfig):
         window_size = seq_len
         skeleton_scale = 2200.
         acquisition_time = 3  # Seconds
+        fps = seq_len # Fps car for action recognition
 
 
 class Network(BaseConfig):
@@ -50,7 +51,8 @@ class Network(BaseConfig):
         in_config = {'realsense': ['rgb', 'depth']}
 
         out_config = {'visualizer': {k: None for k in
-                                     ['fps_ar', 'human_distance', 'focus', 'pose', 'bbox', 'face_bbox', 'actions', 'is_true', 'requires_focus', 'edges', 'log', 'rgb']},
+                                     ['fps_ar', 'human_distance', 'focus', 'pose', 'bbox', 'face_bbox', 'actions',
+                                      'is_true', 'requires_focus', 'edges', 'log', 'rgb']},
                       'action_recognition_rpc': {'action': -1, 'human_distance': -1., 'focus': False}}
         # make the output queue blocking (can be used to put a breakpoint in the sink and debug the process output)
         blocking = False
@@ -78,6 +80,8 @@ class HPE(BaseConfig):
         ppy = 237.75723266601562
         width = 640
         height = 480
+
+        necessary_percentage_visible_joints = 0.7
 
 
 # TODO GO HERE TO CHANGE OPTIONS FOR FOCUS (CHANGE IN FUTURE)

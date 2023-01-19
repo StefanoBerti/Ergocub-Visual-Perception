@@ -148,7 +148,7 @@ class YarpPyNode(Process, ABC):
 
     def _send_all(self, data, blocking):
         for dest in self.out_config:
-            data_dest = copy.deepcopy(self.out_config[dest])
+            data_dest = {}  # copy.deepcopy(self.out_config[dest])  TODO REMOVED DEFAULT VALUES
             data_dest.update(data)  # add computed values while keeping default ones
             data_dest = {k: v for k, v, in data_dest.items() if k in self.out_config[dest]}  # remove unnecessary keys
 

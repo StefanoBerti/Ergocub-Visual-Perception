@@ -15,7 +15,7 @@ class HumanPoseEstimator:
     def __init__(self, just_box=None, yolo_thresh=None, nms_thresh=None, num_aug=None, skeleton=None,
                  yolo_engine_path=None, image_transformation_engine_path=None, bbone_engine_path=None,
                  heads_engine_path=None, skeleton_types_path=None, expand_joints_path=None, fx=None, fy=None, ppx=None,
-                 ppy=None, width=None, height=None):
+                 ppy=None, width=None, height=None, necessary_percentage_visible_joints=None):
 
         self.just_box = just_box
 
@@ -44,6 +44,8 @@ class HumanPoseEstimator:
             self.image_transformation = Runner(image_transformation_engine_path)
             self.bbone = Runner(bbone_engine_path)
             self.heads = Runner(heads_engine_path)
+
+        self.necessary_percentage_visible_joints = necessary_percentage_visible_joints
 
     def estimate(self, frame):
 
@@ -149,7 +151,8 @@ class HumanPoseEstimator:
         is_predicted_to_be_in_fov = is_within_fov(pred2d)
 
         # If less than 1/3 of the joints is visible, then the resulting pose will be weird
-        if is_predicted_to_be_in_fov.sum() < is_predicted_to_be_in_fov.size/2:  # TODO THIS VALUE IS IMPORTANT!
+        # n < 30
+        if is_predicted_to_be_in_fov.sum() > is_predicted_to_be_in_fov.size*self.necessary_percentage_visible_joints:
             return None
 
         # Move the skeleton into estimated absolute position if necessary

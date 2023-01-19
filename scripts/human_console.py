@@ -267,7 +267,6 @@ class VISPYVisualizer(Network.node):
                     if action in self.actions_text.keys():  # Action was already in SS
                         text = action
                         self.actions_text[action].text = text
-                        print(score)
                         self.values[action].width = score * 0.25
                         self.actions_text[action].pos = (3 / 16, 0.6 - (0.1 * i))
                         self.values[action].center = (4 / 8 + ((score * 0.25) / 2), 0.6 - (0.1 * i))

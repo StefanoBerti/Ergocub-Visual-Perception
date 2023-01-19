@@ -21,7 +21,7 @@ docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
 
 
 class ISBFSAR(Network.node):
-    def __init__(self, input_type, cam_width, cam_height, window_size, skeleton_scale, acquisition_time):
+    def __init__(self, input_type, cam_width, cam_height, window_size, skeleton_scale, acquisition_time, fps):
         super().__init__(**Network.Args.to_dict())
         self.input_type = input_type
         self.cam_width = cam_width
@@ -31,6 +31,7 @@ class ISBFSAR(Network.node):
         self.last_poses = []
         self.skeleton_scale = skeleton_scale
         self.acquisition_time = acquisition_time
+        self.fps = fps
         self.last_time = None
         self.edges = None
         self.focus_in = None
@@ -43,6 +44,7 @@ class ISBFSAR(Network.node):
         self.last_data = None
         self.commands_queue = None
         self.last_log = None
+
 
     def startup(self):
         # Load modules
@@ -57,7 +59,7 @@ class ISBFSAR(Network.node):
         self.hpe_proc.start()
 
         self.ar = AR.model(**AR.Args.to_dict())
-        self.ar.load()
+        # self.ar.load()
 
         # To receive human commands
         BaseManager.register('get_queue')
@@ -65,7 +67,7 @@ class ISBFSAR(Network.node):
         manager.connect()
         self.commands_queue = manager.get_queue("human_console_commands")
 
-    def get_frame(self, img=None, log=None):
+    def get_frame(self, img=None, log=None, cap_fps=True):
         """
         get frame, do inference, return all possible info
         keys: img, bbox, img_preprocessed, human_distance, pose, edges, actions, is_true, requires_focus, focus, face_bbox,
@@ -73,17 +75,7 @@ class ISBFSAR(Network.node):
         """
         # Add default keys:values
         elements = {}
-        elements.update(copy.deepcopy(Logging.keys))
-
-        # Cap fps
-        if self.last_time is not None:
-            while (time.time() - self.last_time) < 1 / 16:
-                time.sleep(0.01)
-            self.fps_s.append(1. / (time.time() - self.last_time))
-            fps_s = self.fps_s[-10:]
-            fps = sum(fps_s) / len(fps_s)
-            elements["fps_ar"] = fps
-        self.last_time = time.time()
+        # elements.update(copy.deepcopy(Logging.keys))  # TODO is this needed?
 
         # If img is not given (not a video), try to get img
         if img is None:
@@ -95,6 +87,18 @@ class ISBFSAR(Network.node):
             self.last_log = log
         elements["log"] = self.last_log
 
+        # Cap fps
+        if self.last_time is not None:
+            if (time.time() - self.last_time) < 1 / self.fps and cap_fps:
+                return elements
+            # while (time.time() - self.last_time) < 1 / 16:
+            #     time.sleep(0.01)
+            self.fps_s.append(1. / (time.time() - self.last_time))
+            fps_s = self.fps_s[-10:]
+            fps = sum(fps_s) / len(fps_s)
+            elements["fps_ar"] = fps
+        self.last_time = time.time()
+
         ar_input = {}
 
         # Start independent modules
@@ -104,6 +108,8 @@ class ISBFSAR(Network.node):
         # RGB CASE
         hpe_res = self.hpe_out.get()
         if self.input_type == "hybrid" or self.input_type == "rgb":
+            elements["bbox"] = None
+            elements["img_preprocessed"] = None
             if hpe_res is not None:
                 x1, y1, x2, y2 = hpe_res['bbox']
                 elements["bbox"] = x1, x2, y1, y2
@@ -122,6 +128,10 @@ class ISBFSAR(Network.node):
 
         # SKELETON CASE
         if self.input_type == "hybrid" or self.input_type == "skeleton":
+            elements["human_distance"] = None
+            elements["pose"] = None
+            elements["edges"] = None
+            elements["bbox"] = None
             if hpe_res is not None:
                 pose, edges, bbox = hpe_res['pose'], hpe_res['edges'], hpe_res['bbox']
                 if self.edges is None:
@@ -145,6 +155,8 @@ class ISBFSAR(Network.node):
 
         # FOCUS #######################################################
         focus_ret = self.focus_out.get()
+        elements["focus"] = None
+        elements["face_bbox"] = None
         if focus_ret is not None:
             focus, face = focus_ret
             elements["focus"] = focus
@@ -154,7 +166,6 @@ class ISBFSAR(Network.node):
 
     def loop(self, data):
         log = None
-
         if "rgb" in data.keys():  # Save last data with image
             self.last_data = data
         else:  # It arrives just a message, but we need all
@@ -217,17 +228,17 @@ class ISBFSAR(Network.node):
             sequences = []
             for w in range(way):
                 for s in range(shot):
-                    sequences.append(ss_rgb[w][s].swapaxes(0, 1).reshape(height, seq_len*width, 3))
+                    support_class = ss_rgb[w][s].swapaxes(0, 1).reshape(height, seq_len*width, 3)
+                    support_class = cv2.putText(support_class, f"{labels[w]}, {s}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 2,
+                                                (255, 255, 255), 3, 2)
+                    sequences.append(support_class)
             ss_rgb = np.concatenate(sequences, axis=0)
             cv2.imwrite("SUPPORT_SET.png", ss_rgb)
-            # cv2.imshow("support_set_RGB",
-            #            cv2.resize(ss_rgb.swapaxes(0, 1).reshape(8, 224 * n, 224, 3).swapaxes(0, 1).reshape(n * 224, 8 * 224, 3),
-            #                       (640, 96 * len(ss_rgb))))
         if self.input_type in ["hybrid", "skeleton"]:
             # ss = np.stack([ss[c]["poses"].detach().cpu().numpy() for c in ss.keys()])
             classes = []
             ss_sk = ss["sk"].detach().cpu().numpy()
-            way, shot, _, _ = ss.shape
+            way, shot, _, _ = ss_sk.shape
             for ss_c in ss_sk:  # FOR EACH CLASS, 5, 16, 90
                 ss_c = ss_c.reshape(ss_c.shape[:-1]+(30, 3))  # 5, 16, 30 , 3
                 size = 250
@@ -264,16 +275,16 @@ class ISBFSAR(Network.node):
         requires_focus = len(flag) == 3 and flag[2] == "-focus"
         now = time.time()
         while (time.time() - now) < 3:
-            self._send_all(self.get_frame(log="WAIT..."), False)
+            self._send_all(self.get_frame(log="WAIT...", cap_fps=False), False)
 
-        self._send_all(self.get_frame(log="GO!"), False)
+        self._send_all(self.get_frame(log="GO!", cap_fps=False), False)
         # playsound('assets' + os.sep + 'start.wav')
         data = [[] for _ in range(self.window_size)]
         i = 0
         off_time = (self.acquisition_time / self.window_size)
         while i < self.window_size:
             start = time.time()
-            res = self.get_frame(log="{:.2f}%".format((i / (self.window_size - 1)) * 100))
+            res = self.get_frame(log="{:.2f}%".format((i / (self.window_size - 1)) * 100), cap_fps=False)
             self._send_all(res, False)
             # Check if the sample is good w.r.t. input type
             good = self.input_type in ["skeleton", "hybrid"] and "pose" in res.keys() and res["pose"] is not None

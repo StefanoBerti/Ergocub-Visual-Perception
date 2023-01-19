@@ -133,38 +133,32 @@ class ActionRecognizer:
         return True
 
     def save(self):
-        with open(os.path.join(self.support_set_path, "support_set_labels.pkl"), 'wb') as outfile:
-            pkl.dump(self.support_set_labels, outfile)
+        save_loc = os.path.join(self.support_set_path, self.input_type)
+        if not os.path.exists(save_loc):
+            os.mkdir(save_loc)
 
-        if self.input_type in ["skeleton", "hybrid"]:
-            with open(os.path.join(self.support_set_path, "support_set_data_sk.pkl"), 'wb') as outfile:
-                pkl.dump(self.support_set_data["sk"], outfile)
-        if self.input_type in ["rgb", "hybrid"]:
-            with open(os.path.join(self.support_set_path, "support_set_data_rgb.pkl"), 'wb') as outfile:
-                pkl.dump(self.support_set_data["rgb"], outfile)
-
-        with open(os.path.join(self.support_set_path, "requires_focus.pkl"), 'wb') as outfile:
+        with open(os.path.join(save_loc, "support_set_data.pkl"), 'wb') as outfile:
+            pkl.dump(self.support_set_data, outfile)
+        with open(os.path.join(save_loc, "requires_focus.pkl"), 'wb') as outfile:
             pkl.dump(self.requires_focus, outfile)
-        with open(os.path.join(self.support_set_path, "support_set_mask.pkl"), 'wb') as outfile:
+        with open(os.path.join(save_loc, "support_set_labels.pkl"), 'wb') as outfile:
+            pkl.dump(self.support_set_labels, outfile)
+        with open(os.path.join(save_loc, "support_set_mask.pkl"), 'wb') as outfile:
             pkl.dump(self.support_set_mask, outfile)
 
-        return "Classes saved successfully in " + self.support_set_path
+        return "Classes saved successfully in " + save_loc
 
     def load(self):
-        with open(os.path.join(self.support_set_path, "support_set_labels.pkl"), 'rb') as pkl_file:
+        load_loc = os.path.join(self.support_set_path, self.input_type)
+
+        with open(os.path.join(load_loc, "support_set_labels.pkl"), 'rb') as pkl_file:
             self.support_set_labels = pkl.load(pkl_file)
-
-        if self.input_type in ["skeleton", "hybrid"]:
-            with open(os.path.join(self.support_set_path, "support_set_data_sk.pkl"), 'rb') as pkl_file:
-                self.support_set_data["sk"] = pkl.load(pkl_file)
-        if self.input_type in ["rgb", "hybrid"]:
-            with open(os.path.join(self.support_set_path, "support_set_data_rgb.pkl"), 'rb') as pkl_file:
-                self.support_set_data["rgb"] = pkl.load(pkl_file)
-
-        with open(os.path.join(self.support_set_path, "requires_focus.pkl"), 'rb') as pkl_file:
+        with open(os.path.join(load_loc, "support_set_data.pkl"), 'rb') as pkl_file:
+            self.support_set_data = pkl.load(pkl_file)
+        with open(os.path.join(load_loc, "requires_focus.pkl"), 'rb') as pkl_file:
             self.requires_focus = pkl.load(pkl_file)
-        with open(os.path.join(self.support_set_path, "support_set_mask.pkl"), 'rb') as pkl_file:
+        with open(os.path.join(load_loc, "support_set_mask.pkl"), 'rb') as pkl_file:
             self.support_set_mask = pkl.load(pkl_file)
 
         self.support_set_features = None
-        return f"Loaded {len(self.support_set_labels)} classes"
+        return f"Loaded {len(self.support_set_labels)} classes from {load_loc}"
