@@ -1,20 +1,14 @@
-import copy
 import sys
 from multiprocessing.managers import BaseManager
 from pathlib import Path
-
 import tensorrt  # TODO NEEDED IN ERGOCUB, NOT NEEDED IN ISBFSAR
-
 sys.path.insert(0,  Path(__file__).parent.parent.as_posix())
-from configs.action_rec_config import Network, HPE, FOCUS, AR, MAIN, Logging  # TODO FIX
-# from pathlib import Path
-
+from configs.action_rec_config import Network, HPE, FOCUS, AR, MAIN
 import os
 import numpy as np
 import time
 import cv2
 from multiprocessing import Process, Queue
-
 
 
 docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
@@ -45,7 +39,6 @@ class ISBFSAR(Network.node):
         self.commands_queue = None
         self.last_log = None
 
-
     def startup(self):
         # Load modules
         self.focus_in = Queue(1)
@@ -59,7 +52,7 @@ class ISBFSAR(Network.node):
         self.hpe_proc.start()
 
         self.ar = AR.model(**AR.Args.to_dict())
-        # self.ar.load()
+        self.ar.load()
 
         # To receive human commands
         BaseManager.register('get_queue')
@@ -118,8 +111,6 @@ class ISBFSAR(Network.node):
                 l = max(xm - x1, ym - y1)
                 img_ = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
                 img_ = cv2.resize(img_, (224, 224))
-                # cv2.imshow("", img_)  # TODO REMOVE DEBUG
-                # cv2.waitKey(1)  # TODO REMOVE DEBUG
                 img_ = img_ / 255.
                 img_ = img_ * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406])
                 img_ = img_.swapaxes(-1, -3).swapaxes(-1, -2)
@@ -262,8 +253,6 @@ class ISBFSAR(Network.node):
             for i, label in enumerate(labels):
                 visual = cv2.putText(visual, label, (10, 10 + i*size*shot), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1, 2)
             cv2.imwrite("SUPPORT_SET.png", visual)
-            # cv2.imshow("support_set_SK", visual)
-        # cv2.waitKey(0)
         return "Support saved to SUPPORT_SET.png"
 
     def learn_command(self, flag):

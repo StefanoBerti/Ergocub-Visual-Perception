@@ -177,7 +177,7 @@ class HumanPoseEstimator:
 
 
 if __name__ == "__main__":
-    from ISBFSAR.utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
+    from action_rec.utils.params import MetrabsTRTConfig, RealSenseIntrinsics, MainConfig
     args = MainConfig()
     vis = MPLPosePrinter()
 
