@@ -31,6 +31,7 @@ class ActionRecognizer:
         self.support_set_labels = [None] * way
         self.requires_focus = [None] * way
         self.support_set_features = None
+        self.requires_os = [True] * way
 
         self.previous_frames = []
         self.seq_len = seq_len
@@ -44,16 +45,16 @@ class ActionRecognizer:
         It receives an iterable of data that contains poses, images or both
         """
         if data is None or len(data) == 0:
-            return {}, 0, {}
+            return {}, 0, {}, {}
 
         if len(self.support_set_labels) == 0:  # no class to predict
-            return {}, 0, {}
+            return {}, 0, {}, {}
 
         # Process new frame
         data = {k: torch.FloatTensor(v).cuda() for k, v in data.items()}
         self.previous_frames.append(copy.deepcopy(data))
         if len(self.previous_frames) < self.seq_len:  # few samples
-            return {}, 0, {}
+            return {}, 0, {}, {}
         elif len(self.previous_frames) == self.seq_len + 1:
             self.previous_frames = self.previous_frames[1:]  # add as last frame
 
@@ -89,7 +90,8 @@ class ActionRecognizer:
         true_labels = list(filter(lambda x: x is not None, self.support_set_labels))
         for k in range(len(true_labels)):
             results[true_labels[k]] = (few_shot_result[k])
-        return results, open_set_result, self.requires_focus
+
+        return results, open_set_result, self.requires_focus, self.requires_os
 
     def remove(self, flag):
         # Compute index to remove
@@ -98,6 +100,7 @@ class ActionRecognizer:
             self.support_set_labels[class_id] = None
             self.support_set_mask[class_id] = 0
             self.requires_focus[class_id] = None
+            self.requires_os[class_id] = True
             if self.input_type in ["skeleton", "hybrid"]:
                 self.support_set_data["sk"][class_id] = 0
             if self.input_type in ["rgb", "hybrid"]:
@@ -110,10 +113,16 @@ class ActionRecognizer:
     def edit_focus(self, flag, value):
         if flag not in self.support_set_labels:
             return flag + " is not in the support set"
-        else:
-            index = self.support_set_labels.index(flag)
-        self.requires_focus[index] = bool(value)
-        return flag + " now has focus value " + value
+        index = self.support_set_labels.index(flag)
+        self.requires_focus[index] = bool(int(value))
+        return flag + " now has focus value " + str(bool(int(value)))
+
+    def edit_os(self, flag, value):
+        if flag not in self.support_set_labels:
+            return flag + " is not in the support set"
+        index = self.support_set_labels.index(flag)
+        self.requires_os[index] = bool(int(value))
+        return flag + " now has os value " + str(bool(int(value)))
 
     def train(self, inp, ss_id):
         if inp['flag'] not in self.support_set_labels:
@@ -128,6 +137,7 @@ class ActionRecognizer:
         if self.input_type in ["rgb", "hybrid"]:
             self.support_set_data["rgb"][class_id][ss_id] = torch.FloatTensor(inp['data']['rgb']).cuda()
         self.requires_focus[class_id] = inp['requires_focus']
+        self.requires_os[class_id] = True
         self.support_set_mask[class_id][ss_id] = 1
         self.support_set_features = None
         return True
@@ -145,6 +155,8 @@ class ActionRecognizer:
             pkl.dump(self.support_set_labels, outfile)
         with open(os.path.join(save_loc, "support_set_mask.pkl"), 'wb') as outfile:
             pkl.dump(self.support_set_mask, outfile)
+        with open(os.path.join(save_loc, "requires_os.pkl"), 'wb') as outfile:
+            pkl.dump(self.requires_os, outfile)
 
         return "Classes saved successfully in " + save_loc
 
@@ -159,6 +171,8 @@ class ActionRecognizer:
             self.requires_focus = pkl.load(pkl_file)
         with open(os.path.join(load_loc, "support_set_mask.pkl"), 'rb') as pkl_file:
             self.support_set_mask = pkl.load(pkl_file)
+        with open(os.path.join(load_loc, "requires_os.pkl"), 'rb') as pkl_file:
+            self.requires_os = pkl.load(pkl_file)
 
         self.support_set_features = None
         return f"Loaded {len(self.support_set_labels)} classes from {load_loc}"

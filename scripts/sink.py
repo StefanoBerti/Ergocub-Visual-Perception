@@ -28,6 +28,7 @@ class Sink(Network.node):
         self.edges = None
         self.is_true = None
         self.requires_focus = None
+        self.requires_os = None
         super().__init__(**Network.Args.to_dict())
 
     def startup(self):
@@ -117,13 +118,15 @@ class Sink(Network.node):
             self.is_true = data["is_true"]
         if 'requires_focus' in data.keys():
             self.requires_focus = data['requires_focus']
+        if 'requires_os' in data.keys():
+            self.requires_os = data['requires_os']
         if self.actions is not None and self.hands is None:
             if len(self.actions) > 1:
                 best = max(self.actions, key=self.actions.get)
-                if self.is_true > 0.66:
+                best_index = list(self.actions.keys()).index(best)
+                if self.is_true > 0.66 or not self.requires_os[best_index]:
                     textsize = cv2.getTextSize(best, cv2.FONT_ITALIC, 1, 2)[0]
                     textX = int((img.shape[1] - textsize[0]) / 2)
-                    best_index = list(self.actions.keys()).index(best)
                     text_color = (0, 255, 0) if not self.requires_focus[best_index] or (self.requires_focus[best_index] and focus) else (230, 172, 37)
                     img = cv2.putText(img, best, (textX, 450), cv2.FONT_ITALIC, 1, text_color, 2, cv2.LINE_AA)
 

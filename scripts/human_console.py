@@ -140,19 +140,22 @@ class VISPYVisualizer(Network.node):
                              font_size=10, pos=(0.1, 0.9))
         self.desc_save = Text('SAVE: save', color='white', rotation=0, anchor_x="left",
                               anchor_y="bottom",
-                              font_size=10, pos=(0.1, 0.8))
+                              font_size=10, pos=(0.1, 0.85))
         self.desc_load = Text('LOAD: load', color='white', rotation=0, anchor_x="left",
                               anchor_y="bottom",
-                              font_size=10, pos=(0.1, 0.7))
+                              font_size=10, pos=(0.1, 0.8))
         self.desc_debug = Text('DEBUG: debug', color='white', rotation=0, anchor_x="left",
                                anchor_y="bottom",
-                               font_size=10, pos=(0.1, 0.6))
+                               font_size=10, pos=(0.1, 0.75))
         self.desc_remove = Text('REMOVE ACTION: remove action_name', color='white', rotation=0, anchor_x="left",
                                 anchor_y="bottom",
-                                font_size=10, pos=(0.1, 0.5))
+                                font_size=10, pos=(0.1, 0.7))
         self.edit_focus = Text('EDIT FOCUS: edit_focus action_name value', color='white', rotation=0, anchor_x="left",
                                 anchor_y="bottom",
-                                font_size=10, pos=(0.1, 0.4))
+                                font_size=10, pos=(0.1, 0.65))
+        self.edit_os = Text('EDIT OS: edit_os action_name value', color='white', rotation=0, anchor_x="left",
+                                anchor_y="bottom",
+                                font_size=10, pos=(0.1, 0.6))
         self.input_string = Text(self.input_text, color='purple', rotation=0, anchor_x="left", anchor_y="bottom",
                                  font_size=12, pos=(0.1, 0.3))
         self.log_text = Text('', color='orange', rotation=0, anchor_x="left", anchor_y="bottom",
@@ -163,6 +166,7 @@ class VISPYVisualizer(Network.node):
         b4.add(self.desc_debug)
         b4.add(self.desc_remove)
         b4.add(self.edit_focus)
+        b4.add(self.edit_os)
         b4.add(self.input_string)
         b4.add(self.log_text)
 
@@ -179,6 +183,7 @@ class VISPYVisualizer(Network.node):
         self.is_true = None
         self.requires_focus = None
         self.log = None
+        self.requires_os = None
 
     def loop(self, elements):
         if not elements:
@@ -252,9 +257,12 @@ class VISPYVisualizer(Network.node):
                 self.is_true = elements["is_true"]
             if "requires_focus" in elements.keys():
                 self.requires_focus = elements["requires_focus"]
+            if "requires_os" in elements.keys():
+                self.requires_os = elements["requires_os"]
 
             # Actions
             if self.actions is not None:
+
                 m = max(self.actions.values()) if len(self.actions) > 0 else 0  # Just max
                 for i, action in enumerate(self.actions.keys()):
                     if action is None:
@@ -295,12 +303,19 @@ class VISPYVisualizer(Network.node):
                             self.b2.add(self.focuses[action])
                     # Os score
                     self.actions_text[action].color = "white"
-                    if score == m:
-                        self.is_true = self.is_true + 0.001 if self.is_true < 0.1 else self.is_true
+                    if score == m:  # If action is None, we exit at the beginning
+                        if self.requires_os[i]:
+                            self.is_true = self.is_true + 0.001 if self.is_true < 0.1 else self.is_true
+                            self.os_score.color = get_color(self.is_true)
+                            self.os_score.border_color = get_color(self.is_true)
+                        else:
+                            self.is_true = 1
+                            self.os_score.color = 'white'
+                            self.os_score.border_color = 'white'
+
                         self.os_score.width = self.is_true * 0.25
                         self.os_score.center = [(6 / 8) + ((self.is_true * 0.25) / 2), 0.6 - (0.1 * i)]
-                        self.os_score.color = get_color(self.is_true)
-                        self.os_score.border_color = get_color(self.is_true)
+
                         if self.is_true > 0.66:
                             if self.requires_focus[i]:
                                 self.actions_text[action].color = "green" if self.focus else "orange"
@@ -320,7 +335,7 @@ class VISPYVisualizer(Network.node):
                         self.focuses[key].parent = None
                         self.focuses.pop(key)
                 if len(self.actions_text) == 0:
-                    self.os_score.center = (2, 2)
+                    self.os_score.center = (2, 2)  # MOVE OUTSIDE
         app.process_events()
         return {}
 

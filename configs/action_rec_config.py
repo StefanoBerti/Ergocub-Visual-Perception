@@ -9,7 +9,7 @@ from utils.confort import BaseConfig
 import platform
 
 
-input_type = "rgb"  # rgb, skeleton or hybrid
+input_type = "skeleton"  # rgb, skeleton or hybrid
 docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
 seq_len = 8 if input_type != "skeleton" else 16
 ubuntu = platform.system() == "Linux"
@@ -27,7 +27,7 @@ class Logging(BaseConfig):
     # options: rgb depth mask 'fps center hands partial scene reconstruction transform
     keys = {'action': -1, 'human_distance': -1., 'focus': False,  # Used by rpc
             'bbox': None, 'face_bbox': None, 'pose': None, 'actions': None, 'edges': None, 'is_true': -1,  # Debugging
-            'requires_focus': False}  # Debugging
+            'requires_focus': False, "requires_os": None}  # Debugging
 
 
 class MAIN(BaseConfig):
@@ -52,10 +52,11 @@ class Network(BaseConfig):
 
         out_config = {'visualizer': {k: None for k in
                                      ['fps_ar', 'human_distance', 'focus', 'pose', 'bbox', 'face_bbox', 'actions',
-                                      'is_true', 'requires_focus', 'edges', 'log', 'rgb']},
+                                      'is_true', 'requires_focus', 'edges', 'log', 'rgb', 'requires_os']},
                       'action_recognition_rpc': {'action': -1, 'human_distance': -1., 'focus': False}}
         # make the output queue blocking (can be used to put a breakpoint in the sink and debug the process output)
         blocking = False
+
 
 class HPE(BaseConfig):
     model = HumanPoseEstimator

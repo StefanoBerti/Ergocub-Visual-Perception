@@ -83,9 +83,7 @@ class ISBFSAR(Network.node):
         # Cap fps
         if self.last_time is not None:
             if (time.time() - self.last_time) < 1 / self.fps and cap_fps:
-                return elements
-            # while (time.time() - self.last_time) < 1 / 16:
-            #     time.sleep(0.01)
+                time.sleep(0.01)
             self.fps_s.append(1. / (time.time() - self.last_time))
             fps_s = self.fps_s[-10:]
             fps = sum(fps_s) / len(fps_s)
@@ -138,11 +136,12 @@ class ISBFSAR(Network.node):
 
         # Make inference
         results = self.ar.inference(ar_input)
-        actions, is_true, requires_focus = results
+        actions, is_true, requires_focus, requires_os = results
         elements["actions"] = actions
         elements["is_true"] = is_true
         elements["action"] = list(actions.keys()).index(max(actions, key=actions.get)) if is_true > 0.66 else -1  # TODO PARAMETRIZE
         elements["requires_focus"] = requires_focus
+        elements["requires_os"] = requires_os
 
         # FOCUS #######################################################
         focus_ret = self.focus_out.get()
@@ -171,7 +170,7 @@ class ISBFSAR(Network.node):
             if msg[0] == 'close' or msg[0] == 'exit' or msg[0] == 'quit' or msg[0] == 'q':
                 exit()
 
-            elif msg[0] == "add" and len(msg) > 1:  # TODO ADD INDEX OF SUPPORT SET POSITION
+            elif msg[0] == "add" and len(msg) > 1:
                 log = self.learn_command(msg[1:])
                 data = self._recv()
 
@@ -189,6 +188,9 @@ class ISBFSAR(Network.node):
 
             elif msg[0] == "edit_focus":
                 log = self.ar.edit_focus(msg[1], msg[2])
+
+            elif msg[0] == "edit_os":
+                log = self.ar.edit_os(msg[1], msg[2])
 
             else:
                 log = "Not a valid command!"
