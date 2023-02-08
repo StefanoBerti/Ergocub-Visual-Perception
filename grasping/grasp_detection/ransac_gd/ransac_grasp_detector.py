@@ -73,11 +73,11 @@ class RansacGraspDetectorTRT:
             lines += [plane_plane(planes[right], planes[idx])]
         front_line, top_line, back_line, bottom_line = lines
 
-        vertices = []
+        right_vertices = []
         for line, plane in [[front_line, planes[top]], [top_line, planes[back]],
                             [back_line, planes[bottom]], [bottom_line, planes[front]]]:
-            vertices += [line_plane(line, plane)]
-        top_left, top_right, bottom_right, bottom_left = vertices
+            right_vertices += [line_plane(line, plane)]
+        top_left, top_right, bottom_right, bottom_left = right_vertices
 
         # This way (1, 1) is the top-right vertex of the face
         u, v, = x * np.linalg.norm(bottom_right - bottom_left), y * np.linalg.norm(top_left - bottom_left)
@@ -109,6 +109,8 @@ class RansacGraspDetectorTRT:
         # right_center = centers[right]
         left_center = line_plane([right_center, right_normal], planes[left])
 
+        left_vertices = right_vertices - (np.linalg.norm(left_center - right_center)) * right_normal
+        vertices = np.concatenate([right_vertices, left_vertices])
         return [right_center, rotation, left_center, copy.deepcopy(rotation), planes, lines, vertices]
 
 

@@ -7,7 +7,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 from loguru import logger
 
-sys.path.insert(0,  Path(__file__).parent.parent.as_posix())
+sys.path.insert(0, Path(__file__).parent.parent.as_posix())
 
 from grasping.utils.input import RealSense
 from grasping.utils.misc import compose_transformations, reload_package
@@ -52,7 +52,6 @@ class Grasping(Network.node):
 
         self.max_partial_points = 0
 
-        self.reconstruction = None
         self.prev_denormalize = None
         self.action = {"action": "none"}
 
@@ -102,10 +101,12 @@ class Grasping(Network.node):
             distance = segmented_depth[segmented_depth != 0].min()
             output['distance'] = int(distance)
 
-            if distance < 700: self.action = 'give'
-            else: self.action = 'none'
+            if distance < 700:
+                self.action = 'give'
+            else:
+                self.action = 'none'
 
-        if (c1:=(self.action != 'give')) or (c2:=(len(segmented_depth.nonzero()[0]) < 4096)):
+        if (c1 := (self.action != 'give')) or (c2 := (len(segmented_depth.nonzero()[0]) < 4096)):
             if not c1 and c2:
                 logger.warning('Warning: not enough input points. Skipping reconstruction', recurring=True)
             output['fps_od'] = 1 / self.timer.compute(stop=True)
@@ -151,11 +152,11 @@ class Grasping(Network.node):
 
         # Reconstruction
         fast_weights = self.pcr_encoder(normalized_pc)
-        self.reconstruction = self.pcr_decoder(fast_weights)
+        reconstruction = self.pcr_decoder(fast_weights)
 
         logger.info("Computed object reconstruction", recurring=True)
 
-        if self.reconstruction.shape[0] >= 10_000:
+        if reconstruction.shape[0] >= 10_000:
             logger.warning('Corrupted reconstruction - check the input point cloud', recurring=True)
 
             output['fps_od'] = 1 / self.timer.compute(stop=True)
@@ -163,13 +164,13 @@ class Grasping(Network.node):
 
         center = np.mean(
             (np.block(
-                [self.reconstruction, np.ones([self.reconstruction.shape[0], 1])]) @ denormalize)[..., :3], axis=0
+                [reconstruction, np.ones([reconstruction.shape[0], 1])]) @ denormalize)[..., :3], axis=0
         )[None]
 
         if Logging.debug:
             output['center'] = center
 
-        poses = self.grasp_detector(self.reconstruction @ flip_z)
+        poses = self.grasp_detector(reconstruction @ flip_z)
 
         logger.info("Hand poses computed", recurring=True)
 
@@ -179,17 +180,20 @@ class Grasping(Network.node):
             return output
 
         hands = np.stack([compose_transformations([poses[1].T, poses[0][np.newaxis] * (var * 2) + mean, R]),
-                           compose_transformations([poses[3].T, poses[2][np.newaxis] * (var * 2) + mean, R])], axis=-1)
+                          compose_transformations([poses[3].T, poses[2][np.newaxis] * (var * 2) + mean, R])], axis=-1)
+
+        hands_normalized = np.stack([compose_transformations([poses[1].T, poses[0][np.newaxis]]),
+                                     compose_transformations([poses[3].T, poses[2][np.newaxis]])], axis=-1)
 
         if Logging.debug:
             output['hands'] = hands
             output['planes'] = poses[4]
             output['lines'] = poses[5]
-            output['vertices'] = poses[6]
+            output['vertices'] = poses[6] * (var * 2) + mean  # de-normalized
             o3d_scene = RealSense.rgb_pointcloud(depth, rgb)
             output['partial'] = normalized_pc
             output['scene'] = np.concatenate([np.array(o3d_scene.points) @ R, np.array(o3d_scene.colors)], axis=1)
-            output['reconstruction'] = self.reconstruction
+            output['reconstruction'] = reconstruction
             output['transform'] = denormalize
 
         output['fps_od'] = 1 / self.timer.compute(stop=True)

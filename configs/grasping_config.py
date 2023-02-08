@@ -32,7 +32,9 @@ class Network(BaseConfig):
 
         in_config = {'realsense': ['rgb', 'depth']}
 
-        out_config = {'visualizer': {k: None for k in ['rgb', 'hands', 'mask', 'fps', 'reconstruction', 'planes', 'lines', 'vertices']},
+        out_config = {'visualizer': {k: None for k in ['rgb', 'hands', 'mask', 'fps']},
+                      '3d_visualizer': {k: None for k in ['reconstruction', 'partial', 'transform', 'scene', 'hands',
+                                                          'planes', 'lines', 'vertices']},
                       'object_detection_rpc': {'distance': -1,
                                                'hands': np.full([4, 4, 2], -1.)}}
         # make the output queue blocking (can be used to put a breakpoint in the sink and debug the process output)

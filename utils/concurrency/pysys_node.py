@@ -95,10 +95,8 @@ class PySysNode(Process):
             #     out_v = struct.pack("I%ds" % (len(out_v),), len(out_v), out_v)  # THIS IS 36 bytes
             else:
                 raise Exception(f"Yarp node received unsupported data: {k}: {type(v)}")
-            print("Type:", type(v), ", Len:", len(out_v))
 
             msg += out_v
-        print("final msg has length:", len(msg))
 
         if not blocking:
             while self.ipc.current_messages > 0:

@@ -155,3 +155,4 @@ action_rec/focus/gaze_estimation/weights/raw/
 action_rec/hpe/weights/onnxs
 *.pkl
 *.onnx
+assets
