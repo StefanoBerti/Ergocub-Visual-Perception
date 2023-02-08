@@ -29,6 +29,7 @@ class Sink(Network.node):
         self.is_true = None
         self.requires_focus = None
         self.requires_os = None
+        self.last_n_actions = []  # TODO TEST
         super().__init__(**Network.Args.to_dict())
 
     def startup(self):
@@ -124,11 +125,17 @@ class Sink(Network.node):
             if len(self.actions) > 1:
                 best = max(self.actions, key=self.actions.get)
                 best_index = list(self.actions.keys()).index(best)
-                if self.is_true > 0.66 or not self.requires_os[best_index]:
-                    textsize = cv2.getTextSize(best, cv2.FONT_ITALIC, 1, 2)[0]
-                    textX = int((img.shape[1] - textsize[0]) / 2)
-                    text_color = (0, 255, 0) if not self.requires_focus[best_index] or (self.requires_focus[best_index] and focus) else (230, 172, 37)
-                    img = cv2.putText(img, best, (textX, 450), cv2.FONT_ITALIC, 1, text_color, 2, cv2.LINE_AA)
+                # Temporal consistency start
+                if len(self.last_n_actions) > 16:
+                    self.last_n_actions = self.last_n_actions[1:]
+                self.last_n_actions.append(best)
+                if all([elem == self.last_n_actions[-1] for elem in self.last_n_actions]):
+                # Temporal consistency end
+                    if self.is_true > 0.66 or not self.requires_os[best_index]:
+                        textsize = cv2.getTextSize(best, cv2.FONT_ITALIC, 1, 2)[0]
+                        textX = int((img.shape[1] - textsize[0]) / 2)
+                        text_color = (0, 255, 0) if not self.requires_focus[best_index] or (self.requires_focus[best_index] and focus) else (230, 172, 37)
+                        img = cv2.putText(img, best, (textX, 450), cv2.FONT_ITALIC, 1, text_color, 2, cv2.LINE_AA)
 
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 

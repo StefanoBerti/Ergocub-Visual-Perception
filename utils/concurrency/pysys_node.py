@@ -77,6 +77,7 @@ class PySysNode(Process):
         msg = b""
 
         for k, v in data.items():
+            print(k)
             if isinstance(v, int):
                 out_v = struct.pack("h", v)
             elif isinstance(v, float):
@@ -85,10 +86,19 @@ class PySysNode(Process):
                 out_v = v.tobytes(order='C')
             elif isinstance(v, bool):
                 out_v = struct.pack("?", v)
+            # elif isinstance(v, str):
+            #     if len(v) < 32:
+            #         v += ' ' * (32 - len(v))
+            #     if len(v) > 32:
+            #         v = v[:32]
+            #     out_v = bytes(v, 'utf-8')
+            #     out_v = struct.pack("I%ds" % (len(out_v),), len(out_v), out_v)  # THIS IS 36 bytes
             else:
-                raise Exception(f"Yarp node received unsupported data: {type(v)}")
+                raise Exception(f"Yarp node received unsupported data: {k}: {type(v)}")
+            print("Type:", type(v), ", Len:", len(out_v))
 
             msg += out_v
+        print("final msg has length:", len(msg))
 
         if not blocking:
             while self.ipc.current_messages > 0:

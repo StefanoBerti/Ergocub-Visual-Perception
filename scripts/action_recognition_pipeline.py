@@ -2,14 +2,14 @@ import sys
 from multiprocessing.managers import BaseManager
 from pathlib import Path
 import tensorrt  # TODO NEEDED IN ERGOCUB, NOT NEEDED IN ISBFSAR
-sys.path.insert(0,  Path(__file__).parent.parent.as_posix())
+
+sys.path.insert(0, Path(__file__).parent.parent.as_posix())
 from configs.action_rec_config import Network, HPE, FOCUS, AR, MAIN
 import os
 import numpy as np
 import time
 import cv2
 from multiprocessing import Process, Queue
-
 
 docker = os.environ.get('AM_I_IN_A_DOCKER_CONTAINER', False)
 
@@ -23,6 +23,7 @@ class ISBFSAR(Network.node):
         self.window_size = window_size
         self.fps_s = []
         self.last_poses = []
+        self.last_n_filtered_actions = []
         self.skeleton_scale = skeleton_scale
         self.acquisition_time = acquisition_time
         self.fps = fps
@@ -117,7 +118,7 @@ class ISBFSAR(Network.node):
 
         # SKELETON CASE
         if self.input_type == "hybrid" or self.input_type == "skeleton":
-            elements["human_distance"] = None
+            # elements["human_distance"] = None
             elements["pose"] = None
             elements["edges"] = None
             elements["bbox"] = None
@@ -126,7 +127,8 @@ class ISBFSAR(Network.node):
                 if self.edges is None:
                     self.edges = edges
                 if pose is not None:
-                    elements["human_distance"] = np.sqrt(np.sum(np.square(np.array([0, 0, 0]) - np.array(pose[0])))) * 2.5
+                    elements["human_distance"] = np.sqrt(
+                        np.sum(np.square(np.array([0, 0, 0]) - np.array(pose[0])))) * 2.5
                     pose = pose - pose[0, :]
                     elements["pose"] = pose
                     ar_input["sk"] = pose.reshape(-1)
@@ -139,18 +141,38 @@ class ISBFSAR(Network.node):
         actions, is_true, requires_focus, requires_os = results
         elements["actions"] = actions
         elements["is_true"] = is_true
-        elements["action"] = list(actions.keys()).index(max(actions, key=actions.get)) if is_true > 0.66 else -1  # TODO PARAMETRIZE
         elements["requires_focus"] = requires_focus
         elements["requires_os"] = requires_os
 
         # FOCUS #######################################################
         focus_ret = self.focus_out.get()
-        elements["focus"] = None
+        elements["focus"] = False
         elements["face_bbox"] = None
         if focus_ret is not None:
             focus, face = focus_ret
             elements["focus"] = focus
             elements["face_bbox"] = face.bbox.reshape(-1)
+
+        # set action (for BT) and filtered action (for direct activation)
+        elements["action"] = -1
+        elements["filtered_action"] = -1
+        if len(elements["actions"]) > 0:
+            best_action = max(elements["actions"], key=elements["actions"].get)
+            best_index = list(elements["actions"].keys()).index(best_action)
+            elements["action"] = best_index
+            filtered_action = best_index
+            if elements["requires_os"][best_index]:
+                if is_true < 0.66:
+                    filtered_action = -1
+            if elements["requires_focus"][best_index]:
+                if not elements["focus"]:
+                    filtered_action = -1
+            if len(self.last_n_filtered_actions) > 16:
+                self.last_n_filtered_actions = self.last_n_filtered_actions[1:]
+            self.last_n_filtered_actions.append(best_index)
+            if not all([elem == self.last_n_filtered_actions[-1] for elem in self.last_n_filtered_actions]):
+                filtered_action = -1
+            elements["filtered_action"] = filtered_action
 
         return elements
 
@@ -221,8 +243,9 @@ class ISBFSAR(Network.node):
             sequences = []
             for w in range(way):
                 for s in range(shot):
-                    support_class = ss_rgb[w][s].swapaxes(0, 1).reshape(height, seq_len*width, 3)
-                    support_class = cv2.putText(support_class, f"{labels[w]}, {s}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 2,
+                    support_class = ss_rgb[w][s].swapaxes(0, 1).reshape(height, seq_len * width, 3)
+                    support_class = cv2.putText(support_class, f"{labels[w]}, {s}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX,
+                                                2,
                                                 (255, 255, 255), 3, 2)
                     sequences.append(support_class)
             ss_rgb = np.concatenate(sequences, axis=0)
@@ -233,17 +256,17 @@ class ISBFSAR(Network.node):
             ss_sk = ss["sk"].detach().cpu().numpy()
             way, shot, _, _ = ss_sk.shape
             for ss_c in ss_sk:  # FOR EACH CLASS, 5, 16, 90
-                ss_c = ss_c.reshape(ss_c.shape[:-1]+(30, 3))  # 5, 16, 30 , 3
+                ss_c = ss_c.reshape(ss_c.shape[:-1] + (30, 3))  # 5, 16, 30 , 3
                 size = 250
                 zoom = 2
-                visual = np.zeros((size*ss_c.shape[0], size*ss_c.shape[1]))
-                ss_c = (ss_c + 1)*(size/2)  # Send each pose from [-1, +1] to [0, size]
+                visual = np.zeros((size * ss_c.shape[0], size * ss_c.shape[1]))
+                ss_c = (ss_c + 1) * (size / 2)  # Send each pose from [-1, +1] to [0, size]
                 ss_c *= zoom
                 ss_c = ss_c[..., :2]
-                ss_c[..., 1] += np.arange(ss_c.shape[0])[..., None, None].repeat(ss_c.shape[1], axis=1)*size
-                ss_c[..., 0] += np.arange(ss_c.shape[1])[None, ..., None].repeat(ss_c.shape[0], axis=0)*size
-                ss_c[..., 1] -= size/2
-                ss_c[..., 0] -= size/2
+                ss_c[..., 1] += np.arange(ss_c.shape[0])[..., None, None].repeat(ss_c.shape[1], axis=1) * size
+                ss_c[..., 0] += np.arange(ss_c.shape[1])[None, ..., None].repeat(ss_c.shape[0], axis=0) * size
+                ss_c[..., 1] -= size / 2
+                ss_c[..., 0] -= size / 2
                 ss_c = ss_c.reshape(-1, 30, 2).astype(int)
                 for pose in ss_c:
                     for point in pose:
@@ -253,7 +276,8 @@ class ISBFSAR(Network.node):
                 classes.append(visual)
             visual = np.concatenate(classes, axis=0)
             for i, label in enumerate(labels):
-                visual = cv2.putText(visual, label, (10, 10 + i*size*shot), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 1, 2)
+                visual = cv2.putText(visual, label, (10, 10 + i * size * shot), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                                     (255, 255, 255), 1, 2)
             cv2.imwrite("SUPPORT_SET.png", visual)
         return "Support saved to SUPPORT_SET.png"
 

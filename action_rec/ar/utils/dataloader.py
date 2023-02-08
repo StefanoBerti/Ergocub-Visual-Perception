@@ -172,6 +172,8 @@ if __name__ == "__main__":
     from action_rec.ar.utils.configuration import TRXTrainConfig
 
     input_type = "rgb"
+    data_path = TRXTrainConfig().data_path
+    data_path = "/media/sberti/Data/datasets/NTURGBD_to_YOLO_METRO_122"
 
     loader = MyLoader(TRXTrainConfig().data_path, input_type=input_type, given_122=not ubuntu,
                       do_augmentation=False, support_classes=['cross_toe_touch', 'cutting_paper_(using_scissors)', 'drink_water', 'eat_meal-snack', 'drop'],

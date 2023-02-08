@@ -107,7 +107,7 @@ class HumanPoseEstimator:
         # Heads
         logits = self.heads(outputs[0])
 
-        # Get logits 3d  TODO DO THE SAME WITH 2D
+        # Get logits 3d
         logits = logits[0].reshape(1, 8, 8, 288)
         _, logits2d, logits3d = np.split(logits, [0, 32], axis=3)
         current_format = 'b h w (d j)'
